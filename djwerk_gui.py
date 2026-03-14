@@ -153,7 +153,8 @@ class DJwerkApp(ctk.CTk):
         settings_window.configure(fg_color=DARK_GREY)
         settings_window.attributes("-topmost", True)
         
-        settings_window.grab_set()
+        # Wayland/X11 bug fix: A window must be drawn (mapped) before grab_set() can lock it.
+        settings_window.after(100, settings_window.grab_set)
 
         ctk.CTkLabel(settings_window, text="Settings Cockpit", font=ctk.CTkFont(size=20, weight="bold"), text_color=ORANGE).pack(pady=(20, 5))
         ctk.CTkLabel(settings_window, text="Configure your Master Crate Directory & UI", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 20))
