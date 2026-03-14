@@ -47,7 +47,7 @@ jobs:
         run: pyinstaller djwerk.spec
       - name: Install AppImageTool
         run: |
-          sudo wget -O /usr/local/bin/appimagetool https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage
+          sudo wget -O /usr/local/bin/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
           sudo chmod +x /usr/local/bin/appimagetool
       - name: Create AppImage
         run: |
@@ -65,8 +65,6 @@ jobs:
           exec "\$HERE/usr/bin/djwerk" "\$@"
           EOF
           chmod +x AppDir/AppRun
-          # Run appimagetool (might need workaround for FUSE in CI)
-          # Using --appimage-extract-and-run for older environments
           ARCH=x86_64 /usr/local/bin/appimagetool --appimage-extract-and-run AppDir/ dist/DJwerk-x86_64.AppImage
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -86,27 +84,25 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          # Try to get universal2 wheels for critical packages
-          pip install --only-binary=:all: --platform macosx_11_0_universal2 --upgrade Pillow || pip install Pillow
           pip install -r requirements.txt
           pip install pyinstaller
-      - name: Build with PyInstaller (Universal)
-        run: pyinstaller djwerk.spec
+      - name: Build with PyInstaller (Universal2)
+        run: |
+          # We use universal2 for macOS to support both Intel and Apple Silicon
+          # PyInstaller handles this if we set target_arch
+          pyinstaller djwerk.spec
       - name: Bundle into DMG
         run: |
           brew install create-dmg
-          create-dmg 
-            --volname "DJwerk" 
-            --volicon "dist/DJwerk.app/Contents/Resources/icon-windowed.icns" 
-            --window-pos 200 120 
-            --window-size 600 300 
-            --icon-size 100 
-            --icon "DJwerk.app" 175 120 
-            --hide-extension "DJwerk.app" 
-            --app-drop-link 425 120 
-            "dist/DJwerk-macOS-Universal.dmg" 
+          create-dmg \
+            --volname "DJwerk" \
+            --window-pos 200 120 \
+            --window-size 600 300 \
+            --icon-size 100 \
+            --icon "DJwerk.app" 175 120 \
+            --app-drop-link 425 120 \
+            "dist/DJwerk-macOS-Universal.dmg" \
             "dist/DJwerk.app" || true
-          # Note: If create-dmg fails (e.g. no icon), just zip it or use a fallback
           if [ ! -f "dist/DJwerk-macOS-Universal.dmg" ]; then
             cd dist && zip -r DJwerk-macOS-Universal.zip DJwerk.app && cd ..
           fi
