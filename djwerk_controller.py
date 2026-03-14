@@ -2,11 +2,13 @@ import os
 import threading
 import time
 import re
+import platform
 from urllib.parse import urlparse
 from datetime import datetime
 from typing import Optional
 from models.config import THEMES
 from djwerk_core import DJwerkCore
+from djwerk_version import APP_NAME, APP_VERSION
 from djwerk_matcher import UniversalMatcher
 from universal_db import UniversalDBHandler
 from rekordbox_xml import RekordboxXMLGenerator
@@ -106,8 +108,11 @@ class DJwerkController:
             self.cancel_event.set()
 
     def initialize_ui_log(self):
-        self.view.log_message(">> DJwerk PRO COMMAND CENTER: V0.1.0")
-        self.view.log_message(">> System: LINUX BRIDGE ACTIVE")
+        system_name = platform.system()
+        if system_name == "Darwin":
+            system_name = "macOS"
+        self.view.log_message(f">> {APP_NAME} PRO COMMAND CENTER: v{APP_VERSION}")
+        self.view.log_message(f">> System: {system_name} ACTIVE")
         self.view.log_message(">> Universal XML: library.xml LOADED")
         self.view.log_message(">> Awaiting URL Input...")
 
@@ -187,7 +192,15 @@ class DJwerkController:
             safe_open_url(link)
             if hasattr(self.view, "after"):
                 self.view.after(0, self.view.show_tidal_login, link, code, None)
-        thread = threading.Thread(target=self.tidal_api.start_login_flow, args=(on_login_details,))
+        def run_login():
+            success = self.tidal_api.start_login_flow(on_login_details)
+            if success:
+                self.view.tidal_logged_in = True
+                if hasattr(self.view, "after"):
+                    self.view.after(0, self._on_tidal_login_success)
+                else:
+                    self._on_tidal_login_success()
+        thread = threading.Thread(target=run_login)
         thread.daemon = True
         thread.start()
 
@@ -338,6 +351,8 @@ class DJwerkController:
                 if hasattr(self.view, "after"): self.view.after(0, self.view.show_tidal_login, link, code, None)
             if not self.tidal_api.start_login_flow(on_login_details):
                 self.status = "Idle"; return
+            self.view.tidal_logged_in = True
+            self._on_tidal_login_success()
 
         cookies_browser = getattr(self.view, "cookies_browser", "none")
         try:
@@ -373,6 +388,10 @@ class DJwerkController:
         self.last_synced_tracks = []
         cookies_browser = getattr(self.view, "cookies_browser", "none")
         preferred_format = "flac" if "FLAC" in chosen_format else "mp3"
+        requested_label = "FLAC" if "FLAC" in chosen_format else "MP3 320"
+        if "SOURCE" in chosen_format.upper():
+            requested_label = "SOURCE"
+        quality_on_mismatch = getattr(self.view, "quality_on_mismatch", "skip")
         synced_filenames = []
         index_width = max(3, len(str(len(tracks)))) if tracks else 2
 
@@ -380,7 +399,7 @@ class DJwerkController:
         main_source = tracks[0].get('source', 'Unknown')
         
         # Basis pad: downloads/[Source]/[Crate] [FORMAT]/
-        fmt_tag = f"[{preferred_format.upper()}]"
+        fmt_tag = "[MIXED]" if quality_on_mismatch == "source" else f"[{preferred_format.upper()}]"
         safe_crate_name = crate_name.replace('/', '_').replace('\\', '_')
         playlist_folder = f"{safe_crate_name} {fmt_tag}"
         source_folder = os.path.join(self.core.download_path, main_source.capitalize())
@@ -411,11 +430,71 @@ class DJwerkController:
         # DOWNLOAD PLAYLIST COVER (folder.jpg)
         playlist_cover_url = tracks[0].get('playlist_cover')
         local_cover_path = None
-        if playlist_cover_url:
-            self.ui_log(f"\n[SYSTEM] DOWNLOADING CRATE ARTWORK...")
-            local_cover_path = self.core.download_image(playlist_cover_url, self.last_playlist_path)
-            if local_cover_path:
-                self.ui_log(f">> SAVED: {os.path.basename(local_cover_path)}")
+        quality_policy = {
+            "require_lossless_for_flac": getattr(self.view, "quality_require_lossless_for_flac", True),
+            "require_lossless_or_320_for_mp3": getattr(self.view, "quality_require_lossless_or_320_for_mp3", True),
+            "on_mismatch": getattr(self.view, "quality_on_mismatch", "skip"),
+        }
+
+        def _resolve_metadata_value(value):
+            if value is None:
+                return ""
+            cleaned = str(value).strip()
+            if not cleaned:
+                return ""
+            if cleaned.lower() in {"na", "n/a", "unknown", "unknown artist", "unknown title"}:
+                return ""
+            return cleaned
+
+        def _resolve_artist_title(track, preflight_info):
+            artist = _resolve_metadata_value(track.get("artist"))
+            title = _resolve_metadata_value(track.get("title"))
+            if not artist:
+                for key in ("artist", "uploader", "channel", "creator", "uploader_id"):
+                    artist = _resolve_metadata_value(preflight_info.get(key))
+                    if artist:
+                        break
+            if not title:
+                for key in ("title", "track"):
+                    title = _resolve_metadata_value(preflight_info.get(key))
+                    if title:
+                        break
+            return artist or "Unknown Artist", title or "Unknown Title"
+
+        preflight_results = []
+        eligible = 0
+        rejected = 0
+        needs_probe = 0
+        reject_reasons = {}
+
+        self.ui_log("\n[QUALITY] Preflight eligibility scan...")
+        for track_data in tracks:
+            if self.cancel_event.is_set():
+                return
+            url = track_data.get('url') or f"scsearch:{track_data.get('artist', '')} {track_data.get('title', '')}"
+            preflight = self.core.preflight_quality(
+                url, preferred_format, cookies_browser, quality_policy, requested_label=requested_label
+            )
+            preflight_results.append(preflight)
+            decision = preflight.get("decision", {})
+            action = decision.get("action")
+            if action == "reject":
+                rejected += 1
+                reason = decision.get("reason") or "unknown"
+                reject_reasons[reason] = reject_reasons.get(reason, 0) + 1
+            elif action == "probe":
+                needs_probe += 1
+            else:
+                eligible += 1
+
+        self.ui_log(f"[QUALITY] Eligible: {eligible}")
+        if needs_probe:
+            self.ui_log(f"[QUALITY] Needs Probe: {needs_probe}")
+        self.ui_log(f"[QUALITY] Rejected: {rejected}")
+        if reject_reasons:
+            self.ui_log("[QUALITY] Reasons:")
+            for reason, count in reject_reasons.items():
+                self.ui_log(f"  - {reason} ({count})")
 
         try:
             for idx, track_data in enumerate(tracks, 1):
@@ -423,13 +502,14 @@ class DJwerkController:
                     self.ui_log("\n>> [SYSTEM] SYNC HALTED BY USER.")
                     break
 
-                # SMART QUALITY LOGIC
+                preflight = preflight_results[idx - 1] if idx - 1 < len(preflight_results) else {}
+                preflight_info = preflight.get("preflight_info", {})
+                resolved_artist, resolved_title = _resolve_artist_title(track_data, preflight_info)
+                track_data["artist"] = resolved_artist
+                track_data["title"] = resolved_title
                 target_format = preferred_format
-                if preferred_format == "flac" and not track_data.get('is_lossless', False):
-                    target_format = "mp3"
-                    self.ui_log(f"\n> [SMART SYNC] {track_data['title']}: SOURCE NOT VERIFIED LOSSLESS. FORCING MP3.")
 
-                self.ui_log(f"\n> SYNCING [{idx:03d}/{len(tracks):03d}]: {track_data['artist']} - {track_data['title']} ({target_format.upper()})")
+                self.ui_log(f"\n> SYNCING [{idx:03d}/{len(tracks):03d}]: {resolved_artist} - {resolved_title} ({requested_label})")
                 if 'bpm' in track_data and track_data['bpm']:
                     self.ui_log(f"> METADATA: {track_data['bpm']} BPM | Key: {track_data.get('key', 'N/A')}")
 
@@ -451,20 +531,26 @@ class DJwerkController:
                     parsed = urlparse(url)
                     download_source = parsed.netloc.replace("www.", "") if parsed.netloc else main_source
                 success, result, s_info = self.core.download_track(
-                    url, target_format, self.download_progress_hook, 
+                    url, target_format, self.download_progress_hook,
                     cookies_browser, playlist_folder, idx, index_width,
-                    artist=track_data['artist'], 
+                    artist=track_data['artist'],
                     title=track_data['title'],
-                    source=main_source
+                    source=main_source,
+                    quality_policy=quality_policy,
+                    requested_label=requested_label,
+                    preflight_result=preflight
                 )
-                
+
+                for line in s_info.get("quality_logs", []):
+                    self.ui_log(line)
+
                 if success:
                     abr = s_info.get('abr', 0)
                     src_codec = s_info.get('acodec', 'unknown')
                     src_ext = s_info.get('ext', 'unknown')
                     output_ext = s_info.get('output_ext', target_format)
                     self.ui_log(f"> SOURCE: {download_source} | {src_codec.upper()} @ {abr} kbps ({src_ext})")
-                    self.ui_log(f"> OUTPUT: {output_ext.upper()} (requested {target_format.upper()})")
+                    self.ui_log(f"> OUTPUT: {output_ext.upper()} (requested {requested_label})")
                     
                     if self.cancel_event.is_set(): break
 
@@ -476,6 +562,12 @@ class DJwerkController:
                         if self.core.normalize_audio(result, target, log_callback=self.ui_log):
                             self.ui_log("> [SUCCESS] Audio Leveled.")
                         else: self.ui_log("> [WARN] Normalization failed.")
+
+                    if not local_cover_path and playlist_cover_url:
+                        self.ui_log(f"\n[SYSTEM] DOWNLOADING CRATE ARTWORK...")
+                        local_cover_path = self.core.download_image(playlist_cover_url, self.last_playlist_path)
+                        if local_cover_path:
+                            self.ui_log(f">> SAVED: {os.path.basename(local_cover_path)}")
 
                     self.core.update_metadata(
                         result, track_data['artist'], track_data['title'], 
@@ -536,6 +628,11 @@ class DJwerkController:
 
     def settings_event(self):
         if hasattr(self.view, 'settings_event'): self.view.settings_event()
+
+    def _on_tidal_login_success(self):
+        self._refresh_connection_statuses()
+        if hasattr(self.view, "close_tidal_login_window"):
+            self.view.close_tidal_login_window()
 
     def open_downloads_folder(self):
         import platform, subprocess

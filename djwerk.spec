@@ -2,6 +2,7 @@
 import os
 import platform
 import customtkinter
+from djwerk_version import APP_NAME, APP_VERSION
 
 # Find customtkinter path to include its theme files
 ctk_path = os.path.dirname(customtkinter.__file__)
@@ -67,7 +68,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='DJwerk',
+    name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -87,12 +88,15 @@ exe = EXE(
 if platform.system() == 'Darwin':
     app = BUNDLE(
         exe,
-        name='DJwerk.app',
+        name=f"{APP_NAME}.app",
         icon=icon_file if icon_file and icon_file.endswith('.icns') else None,
         bundle_identifier='com.djwerk.app',
         info_plist={
             'NSPrincipalClass': 'NSApplication',
             'NSAppleScriptEnabled': False,
             'LSMinimumSystemVersion': '10.15.0',
+            'CFBundleName': APP_NAME,
+            'CFBundleShortVersionString': APP_VERSION,
+            'CFBundleVersion': APP_VERSION,
         },
     )

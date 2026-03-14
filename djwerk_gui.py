@@ -5,6 +5,7 @@ import os
 import platform
 import subprocess
 import json
+from djwerk_version import APP_NAME, APP_VERSION, get_app_title
 
 def safe_open_url(url):
     """Opens a URL while ensuring PyInstaller/AppImage libraries don't conflict with system browser."""
@@ -295,7 +296,7 @@ class DJwerkApp(ctk.CTk):
     def __init__(self, core_engine):
         super().__init__()
         self.core = core_engine
-        self.title("DJwerk v0.1.0 - Universal Crate Engine [flarkAUDIO]")
+        self.title(get_app_title())
         self.geometry("1000x700")
         self.configure(fg_color=DARK_GREY)
         self._settings_window = None
@@ -508,6 +509,7 @@ class DJwerkApp(ctk.CTk):
         
         login_window.link_btn = link_btn
         login_window.code_label = code_label
+        login_window.on_close = on_close
 
         def check_status():
             # Check if login is now successful via the app's persistent handler
@@ -523,6 +525,15 @@ class DJwerkApp(ctk.CTk):
         self._focus_window(login_window)
         return login_window
 
+    def close_tidal_login_window(self):
+        window = getattr(self, "_tidal_login_window", None)
+        if window and window.winfo_exists():
+            if hasattr(window, "on_close"):
+                window.on_close()
+            else:
+                window.destroy()
+                self._tidal_login_window = None
+
     def load_config(self):
         self.fx_enabled = False
         self.cookies_browser = "none"
@@ -531,6 +542,9 @@ class DJwerkApp(ctk.CTk):
         self.pref_gain_target = "-14 LUFS (Standard)"
         self.last_playlist_path = None
         self.playlist_history = []
+        self.quality_require_lossless_for_flac = True
+        self.quality_require_lossless_or_320_for_mp3 = True
+        self.quality_on_mismatch = "skip"
         self.credentials = {
             "spotify_client_id": "",
             "spotify_client_secret": "",
@@ -549,6 +563,9 @@ class DJwerkApp(ctk.CTk):
                     self.pref_gain_target = config.get("pref_gain_target", "-14 LUFS (Standard)")
                     self.last_playlist_path = config.get("last_playlist_path")
                     self.playlist_history = config.get("playlist_history", [])
+                    self.quality_require_lossless_for_flac = config.get("quality_require_lossless_for_flac", True)
+                    self.quality_require_lossless_or_320_for_mp3 = config.get("quality_require_lossless_or_320_for_mp3", True)
+                    self.quality_on_mismatch = config.get("quality_on_mismatch", "skip")
                     self.credentials.update(config.get("credentials", {}))
         except Exception as e:
             print(f"Error loading config: {e}")
@@ -564,6 +581,9 @@ class DJwerkApp(ctk.CTk):
                 "pref_gain_target": getattr(self, "pref_gain_target", "-14 LUFS (Standard)"),
                 "last_playlist_path": last_playlist_path or self.last_playlist_path,
                 "playlist_history": playlist_history if playlist_history is not None else self.playlist_history,
+                "quality_require_lossless_for_flac": getattr(self, "quality_require_lossless_for_flac", True),
+                "quality_require_lossless_or_320_for_mp3": getattr(self, "quality_require_lossless_or_320_for_mp3", True),
+                "quality_on_mismatch": getattr(self, "quality_on_mismatch", "skip"),
                 "credentials": credentials or self.credentials
             }
             with open(CONFIG_FILE, 'w') as f:
@@ -663,7 +683,7 @@ class DJwerkApp(ctk.CTk):
             return self._help_window
 
         help_window = ctk.CTkToplevel(self)
-        help_window.title("DJwerk - Help & Manual")
+        help_window.title(f"{APP_NAME} v{APP_VERSION} - Help & Manual")
         help_window.geometry("700x600")
         help_window.configure(fg_color=DARK_GREY)
         help_window.attributes("-topmost", True)
@@ -706,7 +726,7 @@ class DJwerkApp(ctk.CTk):
             return self._settings_window
 
         settings_window = ctk.CTkToplevel(self)
-        settings_window.title("DJwerk - Settings Cockpit")
+        settings_window.title(f"{APP_NAME} v{APP_VERSION} - Settings Cockpit")
         settings_window.geometry("600x650")
         settings_window.configure(fg_color=DARK_GREY)
         settings_window.attributes("-topmost", True)
@@ -729,9 +749,11 @@ class DJwerkApp(ctk.CTk):
 
         def browse_folder():
             from customtkinter import filedialog
-            folder = filedialog.askdirectory(initialdir=self.core.download_path)
+            folder = filedialog.askdirectory(parent=settings_window, initialdir=self.core.download_path)
             if folder:
                 path_entry.delete(0, 'end'); path_entry.insert(0, folder)
+            settings_window.lift()
+            settings_window.focus_force()
 
         ctk.CTkButton(path_frame, text="Browse", width=70, fg_color=MID_GREY, command=browse_folder).pack(side="right")
 
