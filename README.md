@@ -2,7 +2,7 @@
 
 **DJwerk** is the universal "Physical Crate Engine" of the flarkAUDIO suite. It transforms volatile cloud playlists into a robust, physical, and platform-independent music collection for the professional DJ.
 
-## The Mission: From Liquid to Solid
+## The Goal: Offline Reliability for DJs
 DJs should no longer be dependent on Wi-Fi or streaming subscriptions during a set. DJwerk pulls music from the cloud and converts it into physical files (FLAC/MP3) with universal metadata that works across all hardware and software.
 
 ## Core Features
