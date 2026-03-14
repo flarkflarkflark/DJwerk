@@ -6,6 +6,24 @@ import os
 from typing import List, Dict
 from tidal_api_handler import TidalApiHandler
 
+def _join_artist_names(raw_names, fallback="Unknown"):
+    seen = set()
+    cleaned = []
+    for name in raw_names:
+        if not name:
+            continue
+        name = str(name).strip()
+        if not name:
+            continue
+        lowered = name.lower()
+        if lowered in {"na", "n/a", "unknown", "unknown artist"}:
+            continue
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        cleaned.append(name)
+    return " & ".join(cleaned) if cleaned else fallback
+
 class TidalCrateParser:
     def __init__(self, api_handler: TidalApiHandler = None):
         print("[MATCHER] Tidal Scraper Initialized.")
@@ -66,13 +84,16 @@ class TidalCrateParser:
                         found = []
                         if isinstance(obj, dict):
                             if obj.get('type') == 'track' or ('title' in obj and 'artists' in obj and 'duration' in obj):
-                                artist = obj.get('artists', [{}])[0].get('name', obj.get('artist', {}).get('name', 'Unknown'))
+                                artists = obj.get('artists', [])
+                                artist_names = [a.get('name') for a in artists if isinstance(a, dict) and a.get('name')]
+                                fallback_artist = obj.get('artist', {}).get('name', 'Unknown')
+                                artist = _join_artist_names(artist_names, fallback_artist)
                                 found.append({
                                     'artist': artist,
                                     'title': obj.get('title', obj.get('name', 'Unknown')),
                                     'album': overall_title if overall_title else obj.get('album', {}).get('title', ''),
                                     'duration': obj.get('duration'),
-                                    'is_lossless': True,
+                                    'is_lossless': False,
                                     'is_playlist': "playlist" in clean_url,
                                     'source': 'Tidal'
                                 })
@@ -102,7 +123,7 @@ class TidalCrateParser:
                             tracks.append({
                                 'artist': parts[1].replace(".", "").strip(),
                                 'title': parts[0].strip(),
-                                'album': '', 'is_lossless': True, 'is_playlist': True,
+                                'album': '', 'is_lossless': False, 'is_playlist': True,
                                 'source': 'Tidal'
                             })
             if tracks:
@@ -123,7 +144,7 @@ class TidalCrateParser:
                         'artist': entry.get('artist', entry.get('uploader', 'Unknown Artist')),
                         'title': entry.get('title', 'Unknown Title'),
                         'album': info.get('title', '') if 'entries' in info else entry.get('album', ''),
-                        'is_lossless': True, 'is_playlist': 'entries' in info,
+                        'is_lossless': False, 'is_playlist': 'entries' in info,
                         'source': 'Tidal',
                         'duration': entry.get('duration')
                     })
@@ -208,7 +229,9 @@ class SpotifyCrateParser:
                             found = []
                             if isinstance(obj, dict):
                                 if 'type' in obj and obj['type'] == 'track' and 'name' in obj:
-                                    artist = obj.get('artists', [{}])[0].get('name', 'Unknown')
+                                    artists = obj.get('artists', [])
+                                    artist_names = [a.get('name') for a in artists if isinstance(a, dict) and a.get('name')]
+                                    artist = _join_artist_names(artist_names, "Unknown")
                                     found.append({
                                         'artist': artist,
                                         'title': obj['name'],
@@ -425,7 +448,10 @@ class BeatportCrateParser:
                                         if isinstance(first, dict) and ('artists' in first or 'artist' in first) and ('name' in first or 'title' in first):
                                             print(f"[MATCHER] Found Beatport results list (len: {len(obj['results'])}) at depth {depth}")
                                             for item in obj['results']:
-                                                artist = item.get('artists', [{}])[0].get('name', item.get('artist', {}).get('name', 'Unknown'))
+                                                artists = item.get('artists', [])
+                                                artist_names = [a.get('name') for a in artists if isinstance(a, dict) and a.get('name')]
+                                                fallback_artist = item.get('artist', {}).get('name', 'Unknown')
+                                                artist = _join_artist_names(artist_names, fallback_artist)
                                                 title = item.get('name') or item.get('title', 'Unknown')
                                                 
                                                 release = item.get('release', {})

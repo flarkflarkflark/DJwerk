@@ -1,6 +1,8 @@
 import yt_dlp
 import os
 import glob
+import re
+import uuid
 from typing import Tuple, Optional, Callable
 from mutagen.flac import FLAC, Picture
 from mutagen.mp3 import MP3
@@ -22,6 +24,42 @@ class DJwerkCore:
         self.download_path = download_path
         if not os.path.exists(self.download_path):
             os.makedirs(self.download_path)
+
+    def _clean_metadata_value(self, value: Optional[str], fallback: str) -> str:
+        if value is None:
+            return fallback
+        cleaned = str(value).strip()
+        if not cleaned:
+            return fallback
+        lowered = cleaned.lower()
+        if lowered in {"na", "n/a", "unknown", "unknown artist", "unknown title"}:
+            return fallback
+        return cleaned
+
+    def _sanitize_filename_part(self, value: str) -> str:
+        # Remove characters that are invalid across Windows/macOS/Linux filesystems.
+        cleaned = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1f]', "_", value)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" .")
+        return cleaned or "Unknown"
+
+    def _build_canonical_filename(self, artist: Optional[str], title: Optional[str],
+                                  index: Optional[int], index_width: Optional[int],
+                                  extension: str) -> str:
+        safe_artist = self._sanitize_filename_part(self._clean_metadata_value(artist, "Unknown Artist"))
+        safe_title = self._sanitize_filename_part(self._clean_metadata_value(title, "Unknown Title"))
+        prefix = f"{index:0{index_width}d} - " if index is not None and index_width else ""
+        return f"{prefix}{safe_artist} - {safe_title}.{extension.lstrip('.')}"
+
+    def _ensure_unique_path(self, path: str) -> str:
+        if not os.path.exists(path):
+            return path
+        base, ext = os.path.splitext(path)
+        counter = 1
+        while True:
+            candidate = f"{base} ({counter}){ext}"
+            if not os.path.exists(candidate):
+                return candidate
+            counter += 1
 
     def is_track_downloaded(self, artist: str, title: str, format_choice: str = "flac", playlist_folder: str = None) -> bool:
         """Checks if a track already exists. Smart matching handles both prefixed and non-prefixed files."""
@@ -66,7 +104,9 @@ class DJwerkCore:
                        cookies_from_browser: Optional[str] = None,
                        playlist_folder: Optional[str] = None,
                        index: Optional[int] = None,
+                       index_width: Optional[int] = None,
                        artist: Optional[str] = None,
+                       title: Optional[str] = None,
                        source: str = "Unknown") -> Tuple[bool, str, dict]:
         """Downloads a track into a source-specific subfolder with numeric prefix."""
         
@@ -79,11 +119,17 @@ class DJwerkCore:
         if not os.path.exists(folder):
             os.makedirs(folder, exist_ok=True)
 
+        # Build a canonical name from DJwerk metadata and download to a temp name first.
+        pad_width = index_width if index_width else 2
+        canonical_name = self._build_canonical_filename(artist, title, index, pad_width, format_choice)
+        canonical_stem = os.path.splitext(canonical_name)[0]
+        temp_base = os.path.join(folder, f".djwerk_tmp_{uuid.uuid4().hex}")
+        outtmpl = f"{temp_base}.%(ext)s"
+
         # yt-dlp options configured for maximum stability and fallback support
-        # We use a clean 'Artist - Title' format. Order is kept via metadata and M3U.
         ydl_opts = {
             'format': 'bestaudio/best',
-            'outtmpl': f'{folder}/%(artist)s - %(title)s.%(ext)s',
+            'outtmpl': outtmpl,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': format_choice,
@@ -145,26 +191,36 @@ class DJwerkCore:
                     final_filename = info['requested_downloads'][-1].get('filepath')
                 
                 if not final_filename or not os.path.exists(final_filename):
-                    # Fallback naar préparé filename
-                    base_filename = ydl.prepare_filename(info)
-                    filename_without_ext = os.path.splitext(base_filename)[0]
-                    # Check of er een bestand is met de gewenste extensie
-                    potential = f"{filename_without_ext}.{format_choice}"
-                    if os.path.exists(potential):
-                        final_filename = potential
+                    expected_output = f"{temp_base}.{format_choice}"
+                    if os.path.exists(expected_output):
+                        final_filename = expected_output
                     else:
-                        # Scan de folder voor de meest logische match
-                        search_pattern = f"{filename_without_ext}*"
-                        matches = glob.glob(search_pattern)
-                        if matches:
-                            # Pak het bestand dat eindigt op onze format_choice of gewoon de grootste
-                            best_match = next((m for m in matches if m.endswith(format_choice)), matches[0])
-                            final_filename = best_match
+                        # Fallback naar préparé filename
+                        base_filename = ydl.prepare_filename(info)
+                        filename_without_ext = os.path.splitext(base_filename)[0]
+                        # Check of er een bestand is met de gewenste extensie
+                        potential = f"{filename_without_ext}.{format_choice}"
+                        if os.path.exists(potential):
+                            final_filename = potential
+                        else:
+                            # Scan de folder voor de meest logische match
+                            search_pattern = f"{filename_without_ext}*"
+                            matches = glob.glob(search_pattern)
+                            if matches:
+                                # Pak het bestand dat eindigt op onze format_choice of gewoon de grootste
+                                best_match = next((m for m in matches if m.endswith(format_choice)), matches[0])
+                                final_filename = best_match
                 
                 if not final_filename or not os.path.exists(final_filename):
                     raise FileNotFoundError(f"Final file missing for: {url}")
 
-                return True, final_filename, source_info
+                final_ext = os.path.splitext(final_filename)[1].lstrip(".") or format_choice
+                canonical_name = f"{canonical_stem}.{final_ext}"
+                target_path = self._ensure_unique_path(os.path.join(folder, canonical_name))
+                if os.path.abspath(final_filename) != os.path.abspath(target_path):
+                    os.replace(final_filename, target_path)
+                source_info['output_ext'] = final_ext
+                return True, target_path, source_info
 
         except Exception as e:
             return False, str(e), {}
@@ -238,12 +294,14 @@ class DJwerkCore:
             print(f"[DJwerkCore] Error during metadata update for {file_path}: {str(e)}")
             return False
 
-    def normalize_audio(self, file_path: str, target: str) -> bool:
+    def normalize_audio(self, file_path: str, target: str,
+                        log_callback: Optional[Callable[[str], None]] = None) -> bool:
         """Flexible normalization using ffmpeg (Loudness LUFS or Peak)."""
         if not os.path.exists(file_path): return False
         
         try:
             import subprocess
+            import sys
             temp_file = file_path + ".norm" + os.path.splitext(file_path)[1]
             
             # Bepaal ffmpeg parameters
@@ -269,13 +327,35 @@ class DJwerkCore:
                 # We gebruiken de loudnorm filter (1-pass voor snelheid, 2-pass is beter maar traag)
                 cmd = ["ffmpeg", "-y", "-i", file_path, "-af", f"loudnorm=I={lufs}:TP=-1.0:LRA=11", temp_file]
 
-            result = subprocess.run(cmd, capture_output=True, text=True)
+            run_kwargs = {"capture_output": True, "text": True}
+            if os.name == "nt":
+                run_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = getattr(subprocess, "SW_HIDE", 0)
+                run_kwargs["startupinfo"] = startupinfo
+
+            result = subprocess.run(cmd, **run_kwargs)
             if result.returncode == 0 and os.path.exists(temp_file):
                 os.replace(temp_file, file_path)
                 return True
+
+            error_text = (result.stderr or result.stdout or "").strip()
+            if error_text:
+                if log_callback:
+                    log_callback(f">> [FFMPEG] {error_text}")
+                print(error_text, file=sys.stderr)
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
             return False
         except Exception as e:
-            print(f"[DJwerkCore] Normalization failed: {e}")
+            msg = f"[DJwerkCore] Normalization failed: {e}"
+            if log_callback:
+                log_callback(msg)
+            print(msg)
             return False
 
     def download_image(self, url: str, folder_path: str, filename: str = "folder.jpg") -> Optional[str]:

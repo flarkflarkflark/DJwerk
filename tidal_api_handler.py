@@ -143,15 +143,37 @@ class TidalApiHandler:
     def _format_tidal_tracks(self, tracks, collection_name, cover):
         formatted_tracks = []
         for t in tracks:
-            # Check for lossless/high quality
+            # Tidal metadata quality is not a guarantee of downloadable source quality.
             quality = getattr(t, 'audio_quality', 'LOW')
-            is_lossless = quality in ['LOSSLESS', 'HI_RES', 'HI_RES_LOSSLESS']
+            artists = getattr(t, 'artists', None) or []
+            seen = set()
+            artist_names = []
+            for a in artists:
+                name = getattr(a, 'name', None)
+                if not name:
+                    continue
+                name = str(name).strip()
+                if not name:
+                    continue
+                lowered = name.lower()
+                if lowered in {"na", "n/a", "unknown", "unknown artist"}:
+                    continue
+                if lowered in seen:
+                    continue
+                seen.add(lowered)
+                artist_names.append(name)
+            if not artist_names and getattr(t, "artist", None):
+                fallback_name = getattr(t.artist, "name", None)
+                if fallback_name:
+                    artist_names = [fallback_name]
+            artist_display = " & ".join(artist_names) if artist_names else "Unknown Artist"
             
             formatted_tracks.append({
-                'artist': t.artist.name,
+                'artist': artist_display,
                 'title': t.name,
                 'album': collection_name,
-                'is_lossless': is_lossless,
+                'is_lossless': False,
+                'reported_quality': quality,
                 'is_playlist': True,
                 'id': t.id,
                 'duration': t.duration,

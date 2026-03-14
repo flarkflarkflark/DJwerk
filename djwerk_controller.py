@@ -2,6 +2,7 @@ import os
 import threading
 import time
 import re
+from urllib.parse import urlparse
 from datetime import datetime
 from typing import Optional
 from models.config import THEMES
@@ -373,6 +374,7 @@ class DJwerkController:
         cookies_browser = getattr(self.view, "cookies_browser", "none")
         preferred_format = "flac" if "FLAC" in chosen_format else "mp3"
         synced_filenames = []
+        index_width = max(3, len(str(len(tracks)))) if tracks else 2
 
         # We halen de source uit de eerste track voor de hoofdmap
         main_source = tracks[0].get('source', 'Unknown')
@@ -425,7 +427,7 @@ class DJwerkController:
                 target_format = preferred_format
                 if preferred_format == "flac" and not track_data.get('is_lossless', False):
                     target_format = "mp3"
-                    self.ui_log(f"\n> [SMART SYNC] {track_data['title']}: SOURCE IS LOSSY. FORCING MP3.")
+                    self.ui_log(f"\n> [SMART SYNC] {track_data['title']}: SOURCE NOT VERIFIED LOSSLESS. FORCING MP3.")
 
                 self.ui_log(f"\n> SYNCING [{idx:03d}/{len(tracks):03d}]: {track_data['artist']} - {track_data['title']} ({target_format.upper()})")
                 if 'bpm' in track_data and track_data['bpm']:
@@ -441,15 +443,28 @@ class DJwerkController:
                 if self.cancel_event.is_set(): break
 
                 url = track_data.get('url') or f"scsearch:{track_data['artist']} {track_data['title']}"
+                if url.startswith("scsearch:"):
+                    download_source = "SoundCloud Search"
+                elif url.startswith("ytsearch:"):
+                    download_source = "YouTube Search"
+                else:
+                    parsed = urlparse(url)
+                    download_source = parsed.netloc.replace("www.", "") if parsed.netloc else main_source
                 success, result, s_info = self.core.download_track(
                     url, target_format, self.download_progress_hook, 
-                    cookies_browser, playlist_folder, idx, 
-                    artist=track_data['artist'], source=main_source
+                    cookies_browser, playlist_folder, idx, index_width,
+                    artist=track_data['artist'], 
+                    title=track_data['title'],
+                    source=main_source
                 )
                 
                 if success:
                     abr = s_info.get('abr', 0)
-                    self.ui_log(f"> SOURCE: {s_info.get('acodec', '??').upper()} @ {abr} kbps")
+                    src_codec = s_info.get('acodec', 'unknown')
+                    src_ext = s_info.get('ext', 'unknown')
+                    output_ext = s_info.get('output_ext', target_format)
+                    self.ui_log(f"> SOURCE: {download_source} | {src_codec.upper()} @ {abr} kbps ({src_ext})")
+                    self.ui_log(f"> OUTPUT: {output_ext.upper()} (requested {target_format.upper()})")
                     
                     if self.cancel_event.is_set(): break
 
@@ -458,7 +473,7 @@ class DJwerkController:
                     if gain_enabled:
                         target = getattr(self.view, "pref_gain_target", "-14 LUFS (Standard)")
                         self.ui_log(f"> NORMALIZING: Target {target}...")
-                        if self.core.normalize_audio(result, target):
+                        if self.core.normalize_audio(result, target, log_callback=self.ui_log):
                             self.ui_log("> [SUCCESS] Audio Leveled.")
                         else: self.ui_log("> [WARN] Normalization failed.")
 

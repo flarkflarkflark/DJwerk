@@ -11,6 +11,25 @@ class SpotifyApiHandler:
         self.cache_path = cache_path
         self.sp = None
 
+    def _join_artists(self, artists):
+        seen = set()
+        cleaned = []
+        for artist in artists:
+            name = artist.get('name')
+            if not name:
+                continue
+            name = str(name).strip()
+            if not name:
+                continue
+            lowered = name.lower()
+            if lowered in {"na", "n/a", "unknown", "unknown artist"}:
+                continue
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            cleaned.append(name)
+        return " & ".join(cleaned) if cleaned else "Unknown Artist"
+
     def update_credentials(self, client_id, client_secret):
         self.client_id = client_id
         self.client_secret = client_secret
@@ -95,7 +114,7 @@ class SpotifyApiHandler:
                 t = item['track']
                 if not t: continue
                 formatted.append({
-                    'artist': t['artists'][0]['name'],
+                    'artist': self._join_artists(t.get('artists', [])),
                     'title': t['name'],
                     'album': t['album']['name'],
                     'duration': t.get('duration_ms', 0) / 1000.0,
@@ -125,7 +144,7 @@ class SpotifyApiHandler:
             formatted = []
             for t in tracks:
                 formatted.append({
-                    'artist': t['artists'][0]['name'],
+                    'artist': self._join_artists(t.get('artists', [])),
                     'title': t['name'],
                     'album': album_info['name'],
                     'duration': t.get('duration_ms', 0) / 1000.0,

@@ -108,6 +108,7 @@ class ExportCenterWindow(ctk.CTkToplevel):
         self.geometry("600x500")
         self.configure(fg_color=DARK_GREY)
         self.attributes("-topmost", True)
+        self._on_close = self.destroy
         
         ctk.CTkLabel(self, text="🚀 EXPORT CENTER", font=ctk.CTkFont(size=24, weight="bold"), text_color="#3498db").pack(pady=(20, 10))
         ctk.CTkLabel(self, text="Select your target DJ software to push your crates.", font=ctk.CTkFont(size=13), text_color="#777").pack(pady=(0, 20))
@@ -134,7 +135,13 @@ class ExportCenterWindow(ctk.CTkToplevel):
         draw_export_option("Mixxx", "Inject tracks into mixxxdb.sqlite (Linux/Mac/Win)", "#e67e22", "<<ExportMixxxEvent>>")
         draw_export_option("djay Pro / Serato", "Export Extended M3U8 with rich metadata", "#3498db", "<<ExportM3UEvent>>")
 
-        ctk.CTkButton(self, text="CLOSE", fg_color="#444", command=self.destroy).pack(pady=20)
+        self.close_btn = ctk.CTkButton(self, text="CLOSE", fg_color="#444", command=self._on_close)
+        self.close_btn.pack(pady=20)
+
+    def set_on_close(self, on_close):
+        self._on_close = on_close or self.destroy
+        if hasattr(self, "close_btn"):
+            self.close_btn.configure(command=self._on_close)
 
 class TrackSelectorWindow(ctk.CTkToplevel):
     def __init__(self, parent, tracks, on_confirm):
@@ -143,9 +150,10 @@ class TrackSelectorWindow(ctk.CTkToplevel):
         self.geometry("850x650")
         self.configure(fg_color=DARK_GREY)
         self.attributes("-topmost", True)
-        
+
         self.all_tracks = tracks
         self.on_confirm = on_confirm
+        self.on_close = None
         self.checkboxes = []
         
         self.grid_columnconfigure(0, weight=1)
@@ -155,7 +163,8 @@ class TrackSelectorWindow(ctk.CTkToplevel):
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
         
-        ctk.CTkLabel(header_frame, text=f"Detected {len(tracks)} tracks. Select to Sync:", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE).pack(side="left")
+        self.header_label = ctk.CTkLabel(header_frame, text=f"Detected {len(tracks)} tracks. Select to Sync:", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE)
+        self.header_label.pack(side="left")
         
         self.search_entry = ctk.CTkEntry(header_frame, placeholder_text="Filter by Artist or Title...", width=300, border_color=ORANGE)
         self.search_entry.pack(side="right", padx=10)
@@ -170,7 +179,8 @@ class TrackSelectorWindow(ctk.CTkToplevel):
         crate_settings_frame.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
         
         source_name = tracks[0].get('source', 'Unknown').upper() if tracks else 'UNKNOWN'
-        ctk.CTkLabel(crate_settings_frame, text=f"DESTINATION CRATE IN [{source_name}]:", font=ctk.CTkFont(weight="bold"), text_color=ORANGE).pack(side="left")
+        self.crate_label = ctk.CTkLabel(crate_settings_frame, text=f"DESTINATION CRATE IN [{source_name}]:", font=ctk.CTkFont(weight="bold"), text_color=ORANGE)
+        self.crate_label.pack(side="left")
         
         default_crate_name = "Synced Crate"
         if tracks and tracks[0].get('is_playlist'):
@@ -250,7 +260,36 @@ class TrackSelectorWindow(ctk.CTkToplevel):
         chosen_format = self.format_var.get()
         crate_name = self.crate_entry.get().strip() or "Synced Crate"
         self.on_confirm(selected, chosen_format, crate_name)
-        self.destroy()
+        if self.on_close:
+            self.on_close()
+        else:
+            self.destroy()
+
+    def update_tracks(self, tracks, on_confirm):
+        self.all_tracks = tracks
+        self.on_confirm = on_confirm
+        if hasattr(self, "header_label"):
+            self.header_label.configure(text=f"Detected {len(tracks)} tracks. Select to Sync:")
+        if hasattr(self, "search_entry"):
+            self.search_entry.delete(0, "end")
+
+        source_name = tracks[0].get('source', 'Unknown').upper() if tracks else 'UNKNOWN'
+        if hasattr(self, "crate_label"):
+            self.crate_label.configure(text=f"DESTINATION CRATE IN [{source_name}]:")
+
+        default_crate_name = "Synced Crate"
+        if tracks and tracks[0].get('is_playlist'):
+            default_crate_name = tracks[0].get('album', 'Synced Crate')
+        if hasattr(self, "crate_entry"):
+            self.crate_entry.delete(0, "end")
+            self.crate_entry.insert(0, default_crate_name)
+
+        any_lossless = any(t.get('is_lossless', False) for t in tracks)
+        format_options = ["FLAC (Lossless)", "MP3 (320 kbps)"] if any_lossless else ["MP3 (320 kbps)"]
+        default_format = "FLAC (Lossless)" if any_lossless else "MP3 (320 kbps)"
+        self.format_var.set(default_format)
+        self.format_menu.configure(values=format_options)
+        self.refresh_list()
 
 class DJwerkApp(ctk.CTk):
     def __init__(self, core_engine):
@@ -259,6 +298,11 @@ class DJwerkApp(ctk.CTk):
         self.title("DJwerk v0.1.0 - Universal Crate Engine [flarkAUDIO]")
         self.geometry("1000x700")
         self.configure(fg_color=DARK_GREY)
+        self._settings_window = None
+        self._help_window = None
+        self._export_window = None
+        self._tidal_login_window = None
+        self._selector_window = None
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -392,25 +436,68 @@ class DJwerkApp(ctk.CTk):
         self.get_last_log_line = self._get_last_log_line
         self.replace_last_log_line = self._replace_last_log_line
 
+    def _center_window(self, window, width, height):
+        self.update_idletasks()
+        parent_x = self.winfo_rootx()
+        parent_y = self.winfo_rooty()
+        parent_w = self.winfo_width()
+        parent_h = self.winfo_height()
+        x = max(parent_x + (parent_w - width) // 2, 0)
+        y = max(parent_y + (parent_h - height) // 2, 0)
+        window.geometry(f"{width}x{height}+{x}+{y}")
+
+    def _focus_window(self, window):
+        window.deiconify()
+        window.lift()
+        window.focus_force()
+
+    def _register_window(self, attr_name, window, width, height):
+        setattr(self, attr_name, window)
+
+        def _on_close():
+            try:
+                if window.winfo_exists():
+                    window.destroy()
+            finally:
+                setattr(self, attr_name, None)
+
+        window.protocol("WM_DELETE_WINDOW", _on_close)
+        self._center_window(window, width, height)
+        return _on_close
+
     def show_track_selector(self, tracks, on_confirm):
         """Launches the Toplevel selector window."""
-        self.selector = TrackSelectorWindow(self, tracks, on_confirm)
-        self.selector.focus()
-        return self.selector
+        if self._selector_window and self._selector_window.winfo_exists():
+            self._selector_window.update_tracks(tracks, on_confirm)
+            self._focus_window(self._selector_window)
+            return self._selector_window
+
+        selector = TrackSelectorWindow(self, tracks, on_confirm)
+        on_close = self._register_window("_selector_window", selector, 850, 650)
+        selector.on_close = on_close
+        self._focus_window(selector)
+        return selector
 
     def show_tidal_login(self, link, code, on_complete):
         """Launches a device login window for Tidal."""
+        if self._tidal_login_window and self._tidal_login_window.winfo_exists():
+            self._tidal_login_window.link_btn.configure(text=link, command=lambda: safe_open_url(link))
+            self._tidal_login_window.code_label.configure(text=code)
+            self._focus_window(self._tidal_login_window)
+            return self._tidal_login_window
+
         login_window = ctk.CTkToplevel(self)
         login_window.title("DJwerk - Connect to Tidal")
         login_window.geometry("500x400")
         login_window.configure(fg_color=DARK_GREY)
         login_window.attributes("-topmost", True)
+        on_close = self._register_window("_tidal_login_window", login_window, 500, 400)
         
         ctk.CTkLabel(login_window, text="🔗 Connect Tidal DJ Account", font=ctk.CTkFont(size=20, weight="bold"), text_color=ORANGE).pack(pady=(30, 10))
         ctk.CTkLabel(login_window, text="Activate this device to sync lossless tracks directly.", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 30))
         
         ctk.CTkLabel(login_window, text="Go to:", font=ctk.CTkFont(size=14)).pack()
-        link_btn = ctk.CTkButton(login_window, text=link, fg_color=DARK_GREY, text_color=ORANGE, hover_color=MID_GREY, command=self.open_downloads)
+        link_btn = ctk.CTkButton(login_window, text=link, fg_color=DARK_GREY, text_color=ORANGE, hover_color=MID_GREY, command=lambda: safe_open_url(link))
         link_btn.pack(pady=(0, 20))
         
         ctk.CTkLabel(login_window, text="Enter this code:", font=ctk.CTkFont(size=14)).pack()
@@ -419,17 +506,21 @@ class DJwerkApp(ctk.CTk):
         
         ctk.CTkLabel(login_window, text="Waiting for authorization...", font=ctk.CTkFont(size=12, slant="italic"), text_color="#777777").pack()
         
+        login_window.link_btn = link_btn
+        login_window.code_label = code_label
+
         def check_status():
             # Check if login is now successful via the app's persistent handler
             if getattr(self, "tidal_logged_in", False):
                 self.log_message(">> TIDAL: Authorization successful! Window closing...")
-                login_window.destroy()
+                on_close()
             else:
                 # Re-check every second if the window still exists
                 if login_window.winfo_exists():
                     login_window.after(1000, check_status)
             
         login_window.after(1000, check_status)
+        self._focus_window(login_window)
         return login_window
 
     def load_config(self):
@@ -556,16 +647,27 @@ class DJwerkApp(ctk.CTk):
             subprocess.Popen([cmd, dl_path], env=env)
 
     def export_center_event(self):
+        if self._export_window and self._export_window.winfo_exists():
+            self._focus_window(self._export_window)
+            return self._export_window
+
         export_window = ExportCenterWindow(self)
-        export_window.focus()
+        on_close = self._register_window("_export_window", export_window, 600, 500)
+        export_window.set_on_close(on_close)
+        self._focus_window(export_window)
         return export_window
 
     def help_event(self):
+        if self._help_window and self._help_window.winfo_exists():
+            self._focus_window(self._help_window)
+            return self._help_window
+
         help_window = ctk.CTkToplevel(self)
         help_window.title("DJwerk - Help & Manual")
         help_window.geometry("700x600")
         help_window.configure(fg_color=DARK_GREY)
         help_window.attributes("-topmost", True)
+        on_close = self._register_window("_help_window", help_window, 700, 600)
         
         ctk.CTkLabel(help_window, text="📖 USER MANUAL", font=ctk.CTkFont(size=24, weight="bold"), text_color=ORANGE).pack(pady=20)
         
@@ -594,14 +696,21 @@ class DJwerkApp(ctk.CTk):
    - Check the 'downloads/' folder for physical M3U8 files.
 """
         ctk.CTkLabel(scroll, text=manual_text, justify="left", anchor="w", font=ctk.CTkFont(family="Consolas", size=13), text_color="#ccc").pack(padx=20, pady=10, fill="x")
-        ctk.CTkButton(help_window, text="CLOSE", command=help_window.destroy, fg_color="#444").pack(pady=20)
+        ctk.CTkButton(help_window, text="CLOSE", command=on_close, fg_color="#444").pack(pady=20)
+        self._focus_window(help_window)
+        return help_window
 
     def settings_event(self):
+        if self._settings_window and self._settings_window.winfo_exists():
+            self._focus_window(self._settings_window)
+            return self._settings_window
+
         settings_window = ctk.CTkToplevel(self)
         settings_window.title("DJwerk - Settings Cockpit")
         settings_window.geometry("600x650")
         settings_window.configure(fg_color=DARK_GREY)
         settings_window.attributes("-topmost", True)
+        on_close = self._register_window("_settings_window", settings_window, 600, 650)
         
         # Tabview for organization
         tabview = ctk.CTkTabview(settings_window, fg_color=MID_GREY, segmented_button_selected_color=ORANGE, segmented_button_selected_hover_color="#cc7000")
@@ -833,7 +942,9 @@ class DJwerkApp(ctk.CTk):
             
             self.save_config()
             self.event_generate("<<SettingsUpdated>>")
-            settings_window.destroy()
+            on_close()
 
         ctk.CTkButton(settings_window, text="SAVE SETTINGS", fg_color=ORANGE, text_color="black", font=ctk.CTkFont(weight="bold"), command=save_and_close).pack(pady=20)
-        ctk.CTkButton(settings_window, text="CLOSE", fg_color="#444", command=settings_window.destroy).pack(side="bottom", pady=10)
+        ctk.CTkButton(settings_window, text="CLOSE", fg_color="#444", command=on_close).pack(side="bottom", pady=10)
+        self._focus_window(settings_window)
+        return settings_window
