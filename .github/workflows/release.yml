@@ -72,12 +72,9 @@ jobs:
           name: djwerk-linux-appimage
           path: dist/*.AppImage
 
-  build-macos:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [x86_64, arm64]
+  # Split macOS to use native runners for reliability
+  build-macos-intel:
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -87,21 +84,37 @@ jobs:
           cache: 'pip'
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          # Force architecture-specific wheels for Pillow to avoid universal2 conflicts
-          if [ "${{ matrix.arch }}" = "x86_64" ]; then
-            pip install --only-binary=:all: --platform macosx_10_10_x86_64 Pillow
-          else
-            pip install --only-binary=:all: --platform macosx_11_0_arm64 Pillow
-          fi
           pip install -r requirements.txt
           pip install pyinstaller
       - name: Build with PyInstaller
         run: |
-          export DJWERK_ARCH=${{ matrix.arch }}
+          export DJWERK_ARCH=x86_64
           pyinstaller djwerk.spec
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: djwerk-macos-${{ matrix.arch }}
+          name: djwerk-macos-x86_64
+          path: dist/DJwerk.app
+
+  build-macos-silicon:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          export DJWERK_ARCH=arm64
+          pyinstaller djwerk.spec
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: djwerk-macos-arm64
           path: dist/DJwerk.app
