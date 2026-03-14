@@ -57,7 +57,7 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch='universal2' if platform.system() == 'Darwin' else None,
+    target_arch=os.environ.get('DJWERK_ARCH') if platform.system() == 'Darwin' else None,
     codesign_identity=None,
     entitlements_file=None,
     icon=icon_file,

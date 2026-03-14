@@ -74,6 +74,9 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -86,30 +89,13 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-      - name: Build with PyInstaller (Universal2)
+      - name: Build with PyInstaller
         run: |
-          # We use universal2 for macOS to support both Intel and Apple Silicon
-          # PyInstaller handles this if we set target_arch
+          # Set arch via env for the spec file
+          export DJWERK_ARCH=${{ matrix.arch }}
           pyinstaller djwerk.spec
-      - name: Bundle into DMG
-        run: |
-          brew install create-dmg
-          create-dmg \
-            --volname "DJwerk" \
-            --window-pos 200 120 \
-            --window-size 600 300 \
-            --icon-size 100 \
-            --icon "DJwerk.app" 175 120 \
-            --app-drop-link 425 120 \
-            "dist/DJwerk-macOS-Universal.dmg" \
-            "dist/DJwerk.app" || true
-          if [ ! -f "dist/DJwerk-macOS-Universal.dmg" ]; then
-            cd dist && zip -r DJwerk-macOS-Universal.zip DJwerk.app && cd ..
-          fi
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: djwerk-macos-universal
-          path: |
-            dist/*.dmg
-            dist/*.zip
+          name: djwerk-macos-${{ matrix.arch }}
+          path: dist/DJwerk.app
