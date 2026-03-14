@@ -74,7 +74,7 @@ jobs:
 
   # macOS Silicon (Native ARM64)
   build-macos-silicon:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -96,10 +96,9 @@ jobs:
           name: djwerk-macos-arm64
           path: dist/DJwerk.app
 
-  # macOS Intel (Native x86_64 if possible, else via Rosetta)
+  # macOS Intel (x86_64 via Rosetta on macOS-14 runner)
   build-macos-intel:
-    runs-on: macos-13
-    continue-on-error: true # Workaround if macos-13 is flaky
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -109,12 +108,13 @@ jobs:
           cache: 'pip'
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
+          # Use arch -x86_64 to force Intel architecture
+          arch -x86_64 pip install -r requirements.txt
+          arch -x86_64 pip install pyinstaller
       - name: Build with PyInstaller
         run: |
           export DJWERK_ARCH=x86_64
-          pyinstaller djwerk.spec
+          arch -x86_64 pyinstaller djwerk.spec
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
