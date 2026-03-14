@@ -75,6 +75,7 @@ jobs:
   build-macos:
     runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
         arch: [x86_64, arm64]
     steps:
@@ -87,11 +88,16 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
+          # Force architecture-specific wheels for Pillow to avoid universal2 conflicts
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            pip install --only-binary=:all: --platform macosx_10_10_x86_64 Pillow
+          else
+            pip install --only-binary=:all: --platform macosx_11_0_arm64 Pillow
+          fi
           pip install -r requirements.txt
           pip install pyinstaller
       - name: Build with PyInstaller
         run: |
-          # Set arch via env for the spec file
           export DJWERK_ARCH=${{ matrix.arch }}
           pyinstaller djwerk.spec
       - name: Upload Artifact
