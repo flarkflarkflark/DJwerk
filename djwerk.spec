@@ -24,8 +24,8 @@ else:
     icon_file = None
 
 a = Analysis(
-    ['main.py', 'djwerk_gui.py', 'djwerk_core.py', 'djwerk_controller.py', 'djwerk_matcher.py', 'universal_db.py', 'engine_db_handler.py', 'rekordbox_xml.py', 'bandcamp_api_handler.py', 'spotify_api_handler.py', 'tidal_api_handler.py', 'engine_integrity.py', 'crate_health.py', 'send_report.py'],
-    pathex=['.'],
+    ['main.py'],
+    pathex=[os.path.abspath(os.curdir)],
     binaries=[],
     datas=datas,
     hiddenimports=[
@@ -44,7 +44,10 @@ a = Analysis(
         'tidal_api_handler',
         'engine_integrity',
         'crate_health',
-        'send_report'
+        'send_report',
+        'models',
+        'models.config',
+        'models.track'
     ],
     hookspath=[],
     hooksconfig={},
