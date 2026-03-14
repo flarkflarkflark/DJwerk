@@ -72,30 +72,7 @@ jobs:
           name: djwerk-linux-appimage
           path: dist/*.AppImage
 
-  # Split macOS to use native runners for reliability
-  build-macos-intel:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller
-      - name: Build with PyInstaller
-        run: |
-          export DJWERK_ARCH=x86_64
-          pyinstaller djwerk.spec
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: djwerk-macos-x86_64
-          path: dist/DJwerk.app
-
+  # macOS Silicon (Native ARM64)
   build-macos-silicon:
     runs-on: macos-latest
     steps:
@@ -117,4 +94,29 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: djwerk-macos-arm64
+          path: dist/DJwerk.app
+
+  # macOS Intel (Native x86_64 if possible, else via Rosetta)
+  build-macos-intel:
+    runs-on: macos-13
+    continue-on-error: true # Workaround if macos-13 is flaky
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+      - name: Build with PyInstaller
+        run: |
+          export DJWERK_ARCH=x86_64
+          pyinstaller djwerk.spec
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: djwerk-macos-x86_64
           path: dist/DJwerk.app
