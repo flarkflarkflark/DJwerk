@@ -1,47 +1,52 @@
-# DJwerk
+# DJwerk 🎧
 
 **DJwerk** is the universal "Physical Crate Engine" of the flarkAUDIO suite. It transforms volatile cloud playlists into a robust, physical, and platform-independent music collection for the professional DJ.
 
 ## The Goal: Offline Reliability for DJs
 DJs should no longer be dependent on Wi-Fi or streaming subscriptions during a set. DJwerk pulls music from the cloud and converts it into physical files (FLAC/MP3) with universal metadata that works across all hardware and software.
 
-## Core Features
+## Key Features (v0.2.0)
 
-### 1. Universal Input (The Cloud Scrapers)
-- **Lossless Sources:** Native FLAC downloads from **Tidal** and **Qobuz**.
-- **Playlist Converters:** Intelligent translation from **Spotify** playlists to lossless sources.
-- **Underground & Bootlegs:** Integration of **SoundCloud**, **Bandcamp**, and **YouTube** (via yt-dlp).
-- **DJ Stores:** Support for purchased tracks from **Beatport** and **Beatsource**.
+### 1. Universal Input & YOLO Mode 🚀
+- **Native Support:** Sync tracks, albums, and playlists from **Tidal**, **Spotify**, **SoundCloud**, **Bandcamp**, and **Beatport**.
+- **YOLO Mode:** Paste any raw text (tracklists, browser snippets) and DJwerk will intelligently match and sync the tracks from open sources.
+- **Universal Browser Auth:** Uses your active browser session (Chrome, Firefox, etc.) to bypass DRM, captchas, and private access restrictions.
 
-### 2. The "Crate" Engine (Processing)
-- **Normalization:** Converts everything to your standard (e.g., 44.1kHz FLAC or 320kbps MP3).
-- **Metadata Mastery:** 
-    - Automatic analysis of **BPM** and **Key** (Camelot Wheel).
-    - High-res **Album Art** embedding.
-    - Title cleanup (stripping "Official Video" junk).
-- **Harmonic Mixing:** Full support for **Mixed In Key** standards.
-- **STEM-ready:** Optional integration with **STEMwerk** for pre-separation.
+### 2. Pro-Grade Processing 🎚️
+- **Smart Normalization:** Interactive control for **LUFS** (perceived loudness) and **Peak** normalization using FFmpeg.
+- **Metadata Mastery:** Automatic embedding of BPM, Key, high-res Album Art, and track duration.
+- **Smart Quality Logic:** Automatically detects source quality to prevent upscaling lossy audio into fake lossless files.
 
-### 3. Universal Output (The Destinations)
-- **Hardware (Stand-alone):**
-    - **Engine OS (Denon/Numark/Rane):** Direct database injection (`m.db`) for the Prime Go and SC-series.
-    - **Pioneer DJ / AlphaTheta:** CDJ-ready USB structures and Rekordbox XML export.
-- **Software (Performance):**
-    - **Algoriddim djay:** Mobile-ready sync for iPad/iPhone (iCloud/Files).
-    - **Rekordbox, Serato, Traktor, VirtualDJ, Mixxx:** Universal XML and M3U8 playlists.
-- **Creative:**
-    - **Ableton Live:** Automatically warped tracks and project exports.
-    - **Lexicon:** Compatibility for advanced library management.
+### 3. The Export Center (Selective Sync) 📦
+Push your crates directly into your favorite DJ software without manual re-scanning:
+- **Rekordbox:** Direct `library.xml` generation for Pioneer DJ gear.
+- **Engine DJ:** Direct database injection (`m.db`) for Denon/Numark/Rane hardware.
+- **Mixxx:** Automated injection into the Mixxx SQLite library (Linux, macOS, Windows).
+- **djay Pro / Serato:** "Rich M3U8" generation with extended metadata for mobile and desktop apps.
 
-## Technical Roadmap
-1. **v0.1.0:** Tidal to Engine DJ (Denon Prime Go) basic sync.
-2. **v0.2.0:** Spotify Playlist Parser & Metadata Enrichment.
-3. **v0.3.0:** Pioneer/Rekordbox XML Export & SoundCloud support.
-4. **v0.4.0:** djay Mobile Sync & STEMwerk integration.
+## Installation
 
-## Contact
-- **Author:** flarkAUDIO <flarkaudio@pm.me>
-- **GitHub:** [flarkflarkflark](https://github.com/flarkflarkflark)
+```bash
+# Clone the repository
+git clone https://github.com/flarkflarkflark/DJwerk.git
+cd DJwerk
+
+# Setup virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+.venv\Scripts\activate     # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+## Usage
+
+1. Run the application: `python3 main.py`
+2. Configure your **Auth Browser** in Settings -> Connections.
+3. Paste a URL or a text block into the main entry.
+4. Select your tracks in the **Crate Selector**.
+5. Use the **Export Center** to push your tracks to your DJ software.
 
 ---
 *Part of the flarkAUDIO work suite.*

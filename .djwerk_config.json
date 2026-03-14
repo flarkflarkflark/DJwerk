@@ -1,3 +1,14 @@
 {
-    "download_path": "downloads"
+    "download_path": "/mnt/PRODUCTION/GIT/DJwerk/downloads",
+    "fx_enabled": true,
+    "cookies_from_browser": "firefox",
+    "audio_quality": "Max (24-bit FLAC)",
+    "pref_gain_enabled": false,
+    "pref_gain_target": "-14 LUFS (Standard)",
+    "last_playlist_path": "downloads/Tidal/2000s Metal & Hard Rock",
+    "credentials": {
+        "spotify_client_id": "",
+        "spotify_client_secret": "",
+        "bandcamp_username": ""
+    }
 }

@@ -12,6 +12,234 @@ MID_GREY = "#2b2b2b"
 GLOW_BLACK = "#0a0a0a"
 CONFIG_FILE = ".djwerk_config.json"
 
+class CTKToolTip:
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tooltip_window = None
+        self.widget.bind("<Enter>", self.show_tooltip)
+        self.widget.bind("<Leave>", self.hide_tooltip)
+
+    def show_tooltip(self, event=None):
+        if self.tooltip_window or not self.text: return
+        x, y, _, _ = self.widget.bbox("insert")
+        x += self.widget.winfo_rootx() + 25
+        y += self.widget.winfo_rooty() + 25
+        
+        self.tooltip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        tw.attributes("-topmost", True)
+        
+        label = tk.Label(tw, text=self.text, justify='left',
+                       background="#FF8C00", foreground="black", 
+                       relief='solid', borderwidth=1,
+                       font=("Helvetica", "10", "normal"), padx=5, pady=2)
+        label.pack(ipadx=1)
+
+    def hide_tooltip(self, event=None):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
+class InteractiveValue(ctk.CTkLabel):
+    """A label that can be scrolled or clicked to change numeric values."""
+    def __init__(self, master, variable, unit="LUFS", min_val=-24.0, max_val=0.0, step=0.5, **kwargs):
+        super().__init__(master, textvariable=variable, cursor="hand2", **kwargs)
+        self.variable = variable
+        self.unit = unit
+        self.min_val = min_val
+        self.max_val = max_val
+        self.step = step
+        
+        self.bind("<Enter>", lambda e: self.configure(text_color=ORANGE))
+        self.bind("<Leave>", lambda e: self.configure(text_color="#ffffff"))
+        
+        # Scroll bindings
+        self.bind("<Button-4>", self._scroll_up)
+        self.bind("<Button-5>", self._scroll_down)
+        self.bind("<MouseWheel>", self._scroll_win)
+        
+        # Click to edit
+        self.bind("<Button-1>", self._on_click)
+
+    def _get_val(self):
+        try:
+            raw = self.variable.get().split(" ")[0]
+            return float(raw)
+        except: return -14.0
+
+    def _set_val(self, val):
+        val = max(self.min_val, min(self.max_val, val))
+        if self.unit == "dB":
+            self.variable.set(f"{val:+.1f} dB")
+        else:
+            self.variable.set(f"{val:.1f} LUFS")
+
+    def _scroll_up(self, e): self._set_val(self._get_val() + self.step)
+    def _scroll_down(self, e): self._set_val(self._get_val() - self.step)
+    def _scroll_win(self, e):
+        if e.delta > 0: self._set_val(self._get_val() + self.step)
+        else: self._set_val(self._get_val() - self.step)
+
+    def _on_click(self, e):
+        dialog = ctk.CTkInputDialog(text=f"Enter new {self.unit} value:", title="Adjust Gain")
+        new_val = dialog.get_input()
+        try:
+            if new_val: self._set_val(float(new_val))
+        except: pass
+
+class ExportCenterWindow(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("DJwerk - Export Center")
+        self.geometry("600x500")
+        self.configure(fg_color=DARK_GREY)
+        self.attributes("-topmost", True)
+        
+        ctk.CTkLabel(self, text="🚀 EXPORT CENTER", font=ctk.CTkFont(size=24, weight="bold"), text_color="#3498db").pack(pady=(20, 10))
+        ctk.CTkLabel(self, text="Select your target DJ software to push your crates.", font=ctk.CTkFont(size=13), text_color="#777").pack(pady=(0, 20))
+
+        container = ctk.CTkFrame(self, fg_color="transparent")
+        container.pack(fill="both", expand=True, padx=30, pady=10)
+
+        def draw_export_option(name, description, color, event_name):
+            row = ctk.CTkFrame(container, fg_color=MID_GREY, corner_radius=10, height=80)
+            row.pack(fill="x", pady=5)
+            
+            info_frame = ctk.CTkFrame(row, fg_color="transparent")
+            info_frame.pack(side="left", padx=20, fill="y")
+            
+            ctk.CTkLabel(info_frame, text=name, font=ctk.CTkFont(size=16, weight="bold"), text_color=color, anchor="w").pack(pady=(10, 0))
+            ctk.CTkLabel(info_frame, text=description, font=ctk.CTkFont(size=11), text_color="#aaa", anchor="w").pack()
+            
+            btn = ctk.CTkButton(row, text="PUSH", width=80, fg_color=color, text_color="black", font=ctk.CTkFont(weight="bold"), 
+                               command=lambda: parent.event_generate(event_name))
+            btn.pack(side="right", padx=20, pady=20)
+
+        draw_export_option("Rekordbox", "Generate / Update library.xml for Pioneer DJ", ORANGE, "<<ExportRekordboxEvent>>")
+        draw_export_option("Engine DJ", "Direct database injection into m.db (Denon/Numark)", "#00ff00", "<<ExportEngineEvent>>")
+        draw_export_option("Mixxx", "Inject tracks into mixxxdb.sqlite (Linux/Mac/Win)", "#e67e22", "<<ExportMixxxEvent>>")
+        draw_export_option("djay Pro / Serato", "Export Extended M3U8 with rich metadata", "#3498db", "<<ExportM3UEvent>>")
+
+        ctk.CTkButton(self, text="CLOSE", fg_color="#444", command=self.destroy).pack(pady=20)
+
+class TrackSelectorWindow(ctk.CTkToplevel):
+    def __init__(self, parent, tracks, on_confirm):
+        super().__init__(parent)
+        self.title("DJwerk - Crate Selector")
+        self.geometry("850x650")
+        self.configure(fg_color=DARK_GREY)
+        self.attributes("-topmost", True)
+        
+        self.all_tracks = tracks
+        self.on_confirm = on_confirm
+        self.checkboxes = []
+        
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+        
+        # Header & Filter
+        header_frame = ctk.CTkFrame(self, fg_color="transparent")
+        header_frame.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+        
+        ctk.CTkLabel(header_frame, text=f"Detected {len(tracks)} tracks. Select to Sync:", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE).pack(side="left")
+        
+        self.search_entry = ctk.CTkEntry(header_frame, placeholder_text="Filter by Artist or Title...", width=300, border_color=ORANGE)
+        self.search_entry.pack(side="right", padx=10)
+        self.search_entry.bind("<KeyRelease>", lambda e: self.refresh_list())
+
+        # Bulk Actions & Format Selection
+        bottom_frame = ctk.CTkFrame(self, fg_color=MID_GREY, corner_radius=0)
+        bottom_frame.grid(row=3, column=0, sticky="ew")
+        
+        # NIEUW: Crate Name aanpasbaar maken
+        crate_settings_frame = ctk.CTkFrame(self, fg_color="transparent")
+        crate_settings_frame.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
+        
+        source_name = tracks[0].get('source', 'Unknown').upper() if tracks else 'UNKNOWN'
+        ctk.CTkLabel(crate_settings_frame, text=f"DESTINATION CRATE IN [{source_name}]:", font=ctk.CTkFont(weight="bold"), text_color=ORANGE).pack(side="left")
+        
+        default_crate_name = "Synced Crate"
+        if tracks and tracks[0].get('is_playlist'):
+            default_crate_name = tracks[0].get('album', 'Synced Crate')
+        
+        self.crate_entry = ctk.CTkEntry(crate_settings_frame, width=400, border_color=ORANGE, fg_color=GLOW_BLACK)
+        self.crate_entry.pack(side="left", padx=10)
+        self.crate_entry.insert(0, default_crate_name)
+
+        bulk_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent")
+        bulk_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkButton(bulk_frame, text="Select All", width=100, fg_color=DARK_GREY, command=self.select_all).pack(side="left", padx=5)
+        ctk.CTkButton(bulk_frame, text="Select None", width=100, fg_color=DARK_GREY, command=self.select_none).pack(side="left", padx=5)
+        
+        # CHIQUE: Formaat keuze hier in de balk
+        ctk.CTkLabel(bulk_frame, text="FORMAT:", font=ctk.CTkFont(weight="bold"), text_color=ORANGE).pack(side="left", padx=(30, 5))
+        
+        # AUTO-SELECT FORMAT & OPTIONS
+        any_lossless = any(t.get('is_lossless', False) for t in tracks)
+        format_options = ["FLAC (Lossless)", "MP3 (320 kbps)"] if any_lossless else ["MP3 (320 kbps)"]
+        default_format = "FLAC (Lossless)" if any_lossless else "MP3 (320 kbps)"
+        
+        self.format_var = ctk.StringVar(value=default_format)
+        self.format_menu = ctk.CTkOptionMenu(bulk_frame, values=format_options, variable=self.format_var, fg_color=GLOW_BLACK, button_color=ORANGE, width=150)
+        self.format_menu.pack(side="left", padx=5)
+
+        self.sync_btn = ctk.CTkButton(bulk_frame, text="START SYNC SELECTED", fg_color=ORANGE, text_color="black", font=ctk.CTkFont(weight="bold"), command=self.confirm)
+        self.sync_btn.pack(side="right", padx=5)
+
+        # Scrollable List
+        self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color=GLOW_BLACK, border_width=1, border_color="#333")
+        self.scroll_frame.grid(row=1, column=0, padx=20, pady=0, sticky="nsew")
+        
+        self.refresh_list()
+
+    def refresh_list(self):
+        # Clear existing
+        for cb in self.checkboxes:
+            cb.destroy()
+        self.checkboxes = []
+        
+        query = self.search_entry.get().lower()
+        
+        def _format_duration(seconds):
+            if not seconds: return "??:??"
+            m, s = divmod(int(seconds), 60)
+            return f"{m:02d}:{s:02d}"
+
+        for i, track in enumerate(self.all_tracks):
+            # SOURCE & QUALITY TAGS (Pro-Grade display)
+            src = track.get('source', 'SEARCH').upper()
+            qual = "FLAC" if track.get('is_lossless') else "MP3"
+            dur = _format_duration(track.get('duration'))
+            
+            display_text = f"[{src} | {qual}] [{dur}] {track['artist']} - {track['title']}"
+            if query and query not in display_text.lower():
+                continue
+                
+            cb = ctk.CTkCheckBox(self.scroll_frame, text=display_text, text_color="#ffffff", border_color=ORANGE, hover_color=ORANGE)
+            cb.pack(fill="x", padx=10, pady=5)
+            cb.select() # Default aan
+            # We store the original track object in the widget for easy retrieval
+            cb.track_data = track
+            self.checkboxes.append(cb)
+
+    def select_all(self):
+        for cb in self.checkboxes:
+            cb.select()
+            
+    def select_none(self):
+        for cb in self.checkboxes:
+            cb.deselect()
+
+    def confirm(self):
+        selected = [cb.track_data for cb in self.checkboxes if cb.get()]
+        chosen_format = self.format_var.get()
+        crate_name = self.crate_entry.get().strip() or "Synced Crate"
+        self.on_confirm(selected, chosen_format, crate_name)
+        self.destroy()
+
 class DJwerkApp(ctk.CTk):
     def __init__(self, core_engine):
         super().__init__()
@@ -35,59 +263,156 @@ class DJwerkApp(ctk.CTk):
 
         self.sync_btn = ctk.CTkButton(self.sidebar, text="Sync Crate", fg_color=ORANGE, text_color="black", font=ctk.CTkFont(weight="bold"), command=lambda: self.event_generate("<<SyncEvent>>"))
         self.sync_btn.pack(padx=20, pady=10, fill="x")
+        CTKToolTip(self.sync_btn, "Analyzes the URL and starts the Crate Selector")
+
+        self.cancel_btn = ctk.CTkButton(self.sidebar, text="CANCEL SYNC", fg_color="#444", text_color="#aaa", font=ctk.CTkFont(weight="bold"), command=lambda: self.event_generate("<<CancelSyncEvent>>"))
+        self.cancel_btn.pack(padx=20, pady=(0, 10), fill="x")
+        CTKToolTip(self.cancel_btn, "Halt all active synchronization processes (ESC)")
+
+        self.export_btn = ctk.CTkButton(self.sidebar, text="EXPORT CENTER", fg_color="transparent", border_width=1, border_color="#3498db", text_color="#3498db", font=ctk.CTkFont(weight="bold"), command=self.export_center_event)
+        self.export_btn.pack(padx=20, pady=10, fill="x")
+        CTKToolTip(self.export_btn, "Push your collection to Rekordbox, Engine DJ, Mixxx or djay")
 
         self.downloads_btn = ctk.CTkButton(self.sidebar, text="Open Downloads", fg_color="transparent", border_width=1, border_color=ORANGE, command=self.open_downloads)
         self.downloads_btn.pack(padx=20, pady=10, fill="x")
+        CTKToolTip(self.downloads_btn, "Open your local DJ library folder")
 
         self.settings_btn = ctk.CTkButton(self.sidebar, text="Settings", fg_color="transparent", command=self.settings_event)
         self.settings_btn.pack(side="bottom", pady=20)
+        CTKToolTip(self.settings_btn, "Configure Quality, Normalization and API Keys")
+        
+        # Global bindings
+        self.bind("<Escape>", lambda e: self.event_generate("<<CancelSyncEvent>>"))
 
         # Main Panel
         self.main_panel = ctk.CTkFrame(self, fg_color=DARK_GREY)
         self.main_panel.grid(row=0, column=1, padx=20, pady=20, sticky="nsew")
         self.main_panel.grid_columnconfigure(0, weight=1)
+        self.main_panel.grid_rowconfigure(3, weight=1) # Terminal takes all space
 
-        self.url_entry = ctk.CTkEntry(self.main_panel, placeholder_text="Paste Tidal / Spotify / SoundCloud URL here...", height=45, border_color=ORANGE, fg_color=GLOW_BLACK, text_color="#ffffff", font=ctk.CTkFont(size=14))
-        self.url_entry.grid(row=0, column=0, sticky="ew", padx=20, pady=20)
+        # URL Input & Primary Action
+        self.url_entry = ctk.CTkEntry(self.main_panel, placeholder_text="Paste Tidal / Spotify / SoundCloud / Bandcamp URL here...", height=45, border_color=ORANGE, fg_color=GLOW_BLACK, text_color="#ffffff", font=ctk.CTkFont(size=14))
+        self.url_entry.grid(row=0, column=0, sticky="ew", padx=20, pady=(20, 5))
+        CTKToolTip(self.url_entry, "Paste a playlist, album or track URL here")
 
+        self.yolo_btn = ctk.CTkButton(self.main_panel, text="PASTE & SYNC CRATE", fg_color="#8B0000", hover_color="#FF0000", text_color="white", height=40, font=ctk.CTkFont(size=15, weight="bold"), command=lambda: self.event_generate("<<YoloSyncEvent>>"))
+        self.yolo_btn.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 15))
+        CTKToolTip(self.yolo_btn, "Sync directly from your clipboard text block")
+
+        # Action Bar (Folders only now)
+        self.action_bar = ctk.CTkFrame(self.main_panel, fg_color="transparent")
+        self.action_bar.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
+        
+        self.open_last_btn = ctk.CTkButton(self.action_bar, text="OPEN LAST PLAYLIST", fg_color="transparent", border_width=1, border_color=ORANGE, text_color=ORANGE, command=lambda: self.event_generate("<<OpenLastFolderEvent>>"))
+        self.open_last_btn.pack(side="right")
+        CTKToolTip(self.open_last_btn, "Quickly open the folder of the last synced batch")
+
+        # [[ PRO COMMAND CENTER ]]
+        self.terminal_frame = ctk.CTkFrame(self.main_panel, fg_color=GLOW_BLACK, border_width=2, border_color="#333")
+        self.terminal_frame.grid(row=3, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.terminal_frame.grid_columnconfigure(0, weight=1)
+        self.terminal_frame.grid_rowconfigure(1, weight=1)
+
+        self.crate_log = ctk.CTkTextbox(self.terminal_frame, fg_color="transparent", text_color="#00FF00", font=ctk.CTkFont(family="Consolas", size=13))
+        self.crate_log.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+        
+        # Configure color tags for the terminal
+        self.crate_log.tag_config("ERROR", foreground="#FF4444")
+        self.crate_log.tag_config("SUCCESS", foreground="#44FF44")
+        self.crate_log.tag_config("INFO", foreground="#4444FF")
+        self.crate_log.tag_config("SYSTEM", foreground=ORANGE)
+        
         # Context menu
         self._create_context_menu(self.url_entry)
-
-        self.glow_panel = ctk.CTkFrame(self.main_panel, height=300, corner_radius=20, fg_color=GLOW_BLACK, border_width=2, border_color="#333")
-        self.glow_panel.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
-        self.visualizer_label = ctk.CTkLabel(self.glow_panel, text="[ FLARKING... ]", font=ctk.CTkFont(size=18, slant="italic"), text_color=ORANGE)
-        self.visualizer_label.place(relx=0.5, rely=0.5, anchor="center")
-
-        self.crate_log = ctk.CTkTextbox(self.main_panel, height=200, fg_color=GLOW_BLACK, text_color="#00FF00", font=ctk.CTkFont(family="Consolas", size=12))
-        self.crate_log.grid(row=2, column=0, padx=20, pady=20, sticky="ew")
         
         self.log_message = self._log_message
         self.get_last_log_line = self._get_last_log_line
         self.replace_last_log_line = self._replace_last_log_line
 
+    def show_track_selector(self, tracks, on_confirm):
+        """Launches the Toplevel selector window."""
+        self.selector = TrackSelectorWindow(self, tracks, on_confirm)
+        self.selector.focus()
+        return self.selector
+
+    def show_tidal_login(self, link, code, on_complete):
+        """Launches a device login window for Tidal."""
+        login_window = ctk.CTkToplevel(self)
+        login_window.title("DJwerk - Connect to Tidal")
+        login_window.geometry("500x400")
+        login_window.configure(fg_color=DARK_GREY)
+        login_window.attributes("-topmost", True)
+        
+        ctk.CTkLabel(login_window, text="🔗 Connect Tidal DJ Account", font=ctk.CTkFont(size=20, weight="bold"), text_color=ORANGE).pack(pady=(30, 10))
+        ctk.CTkLabel(login_window, text="Activate this device to sync lossless tracks directly.", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 30))
+        
+        ctk.CTkLabel(login_window, text="Go to:", font=ctk.CTkFont(size=14)).pack()
+        link_btn = ctk.CTkButton(login_window, text=link, fg_color="transparent", text_color=ORANGE, hover_color=MID_GREY, command=self.open_downloads)
+        link_btn.pack(pady=(0, 20))
+        
+        ctk.CTkLabel(login_window, text="Enter this code:", font=ctk.CTkFont(size=14)).pack()
+        code_label = ctk.CTkLabel(login_window, text=code, font=ctk.CTkFont(size=42, weight="bold"), text_color="#ffffff")
+        code_label.pack(pady=20)
+        
+        ctk.CTkLabel(login_window, text="Waiting for authorization...", font=ctk.CTkFont(size=12, slant="italic"), text_color="#777777").pack()
+        
+        def check_status():
+            # Check if login is now successful via the app's persistent handler
+            if getattr(self, "tidal_logged_in", False):
+                self.log_message(">> TIDAL: Authorization successful! Window closing...")
+                login_window.destroy()
+            else:
+                # Re-check every second if the window still exists
+                if login_window.winfo_exists():
+                    login_window.after(1000, check_status)
+            
+        login_window.after(1000, check_status)
+        return login_window
+
     def load_config(self):
-        self.fx_enabled = False # Standaard uit wegens trage VPS X11 connectie
+        self.fx_enabled = False
+        self.cookies_browser = "none"
+        self.audio_quality = "High (FLAC)"
+        self.pref_gain_enabled = False
+        self.pref_gain_target = "-14 LUFS (Standard)"
+        self.last_playlist_path = None
+        self.credentials = {
+            "spotify_client_id": "",
+            "spotify_client_secret": "",
+            "bandcamp_username": ""
+        }
         try:
             if os.path.exists(CONFIG_FILE):
                 import json
                 with open(CONFIG_FILE, 'r') as f:
                     config = json.load(f)
-                    if "download_path" in config:
-                        self.core.download_path = config["download_path"]
-                        if not os.path.exists(self.core.download_path):
-                            os.makedirs(self.core.download_path)
-                    if "fx_enabled" in config:
-                        self.fx_enabled = config["fx_enabled"]
+                    self.core.download_path = config.get("download_path", "downloads")
+                    self.fx_enabled = config.get("fx_enabled", False)
+                    self.cookies_browser = config.get("cookies_from_browser", "none")
+                    self.audio_quality = config.get("audio_quality", "High (FLAC)")
+                    self.pref_gain_enabled = config.get("pref_gain_enabled", False)
+                    self.pref_gain_target = config.get("pref_gain_target", "-14 LUFS (Standard)")
+                    self.last_playlist_path = config.get("last_playlist_path")
+                    self.credentials.update(config.get("credentials", {}))
         except Exception as e:
             print(f"Error loading config: {e}")
 
-    def save_config(self, new_path):
+    def save_config(self, new_path=None, cookies_browser=None, credentials=None, last_playlist_path=None):
         try:
-            config = {"download_path": new_path}
+            config = {
+                "download_path": new_path or self.core.download_path,
+                "fx_enabled": self.fx_enabled,
+                "cookies_from_browser": cookies_browser or self.cookies_browser,
+                "audio_quality": self.audio_quality,
+                "pref_gain_enabled": getattr(self, "pref_gain_enabled", False),
+                "pref_gain_target": getattr(self, "pref_gain_target", "-14 LUFS (Standard)"),
+                "last_playlist_path": last_playlist_path or self.last_playlist_path,
+                "credentials": credentials or self.credentials
+            }
             with open(CONFIG_FILE, 'w') as f:
-                json.write(config, f)
+                json.dump(config, f, indent=4)
         except Exception as e:
-            pass # Silent fail voor UI
+            pass
 
     def _create_context_menu(self, widget):
         menu = tk.Menu(self, tearoff=0, bg=MID_GREY, fg="#ffffff", activebackground=ORANGE, activeforeground="black")
@@ -123,10 +448,26 @@ class DJwerkApp(ctk.CTk):
             menu.tk_popup(event.x_root, event.y_root)
             
         widget.bind("<Button-3>", show_menu)
-        widget.bind("<Button-2>", show_menu)
+        widget.bind("<Button-2>", lambda e: handle_paste())
 
     def _log_message(self, text):
+        # Insert text and then apply tags if keywords are found
         self.crate_log.insert("end", text + "\n")
+        
+        # Color specific lines based on status
+        line_count = int(self.crate_log.index("end-1c").split(".")[0]) - 1
+        start_idx = f"{line_count}.0"
+        end_idx = f"{line_count}.end"
+        
+        if "[ERROR]" in text or "[FATAL]" in text:
+            self.crate_log.tag_add("ERROR", start_idx, end_idx)
+        elif "[SUCCESS]" in text:
+            self.crate_log.tag_add("SUCCESS", start_idx, end_idx)
+        elif "[INFO]" in text:
+            self.crate_log.tag_add("INFO", start_idx, end_idx)
+        elif "[SYSTEM]" in text or "[PLAYLIST]" in text:
+            self.crate_log.tag_add("SYSTEM", start_idx, end_idx)
+            
         self.crate_log.see("end")
         
     def _get_last_log_line(self):
@@ -146,75 +487,202 @@ class DJwerkApp(ctk.CTk):
         else:
             subprocess.call(["xdg-open", dl_path])
 
+    def export_center_event(self):
+        export_window = ExportCenterWindow(self)
+        export_window.focus()
+        return export_window
+
     def settings_event(self):
         settings_window = ctk.CTkToplevel(self)
         settings_window.title("DJwerk - Settings Cockpit")
-        settings_window.geometry("550x450")
+        settings_window.geometry("600x600")
         settings_window.configure(fg_color=DARK_GREY)
         settings_window.attributes("-topmost", True)
         
-        # Wayland/X11 bug fix: A window must be drawn (mapped) before grab_set() can lock it.
-        settings_window.after(100, settings_window.grab_set)
-
-        ctk.CTkLabel(settings_window, text="Settings Cockpit", font=ctk.CTkFont(size=20, weight="bold"), text_color=ORANGE).pack(pady=(20, 5))
-        ctk.CTkLabel(settings_window, text="Configure your Master Crate Directory & UI", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 20))
+        # Tabview for organization
+        tabview = ctk.CTkTabview(settings_window, fg_color=MID_GREY, segmented_button_selected_color=ORANGE, segmented_button_selected_hover_color="#cc7000")
+        tabview.pack(fill="both", expand=True, padx=20, pady=(10, 20))
         
-        path_frame = ctk.CTkFrame(settings_window, fg_color="transparent")
-        path_frame.pack(fill="x", padx=20, pady=10)
+        # TAB 1: GENERAL
+        tab_general = tabview.add("General")
+        ctk.CTkLabel(tab_general, text="Main Crate & UI Settings", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE).pack(pady=(10, 20))
         
-        ctk.CTkLabel(path_frame, text="Download Path:", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff").pack(side="left", padx=(0, 10))
-        
-        path_entry = ctk.CTkEntry(path_frame, text_color="#ffffff", fg_color=GLOW_BLACK, border_color=ORANGE, placeholder_text="/home/user/Music/DJwerk")
+        path_frame = ctk.CTkFrame(tab_general, fg_color="transparent")
+        path_frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkLabel(path_frame, text="Download Path:", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=(0, 10))
+        path_entry = ctk.CTkEntry(path_frame, text_color="#ffffff", fg_color=GLOW_BLACK, border_color=ORANGE)
         path_entry.pack(side="left", expand=True, fill="x", padx=(0, 10))
         path_entry.insert(0, self.core.download_path)
 
         def browse_folder():
             from customtkinter import filedialog
-            folder = filedialog.askdirectory(initialdir=self.core.download_path, title="Select Master Crate Directory")
+            folder = filedialog.askdirectory(initialdir=self.core.download_path)
             if folder:
-                path_entry.delete(0, 'end')
-                path_entry.insert(0, folder)
+                path_entry.delete(0, 'end'); path_entry.insert(0, folder)
 
-        browse_btn = ctk.CTkButton(path_frame, text="Browse", width=70, fg_color=MID_GREY, hover_color=ORANGE, border_width=1, border_color=ORANGE, command=browse_folder)
-        browse_btn.pack(side="right")
+        ctk.CTkButton(path_frame, text="Browse", width=70, fg_color=MID_GREY, command=browse_folder).pack(side="right")
 
-        # FX Toggle
-        fx_frame = ctk.CTkFrame(settings_window, fg_color="transparent")
-        fx_frame.pack(fill="x", padx=20, pady=10)
-        fx_switch = ctk.CTkSwitch(fx_frame, text="Enable GUI Glow/Visualizer FX", text_color="#ffffff", font=ctk.CTkFont(size=14, weight="bold"), progress_color=ORANGE, button_color="#ffffff", button_hover_color="#dddddd")
-        fx_switch.pack(side="left", padx=10)
-        if self.fx_enabled:
-            fx_switch.select()
+        # CHIQUE: Auto-Quality Mapping
+        ctk.CTkLabel(tab_general, text="Auto-Quality Mapping", font=ctk.CTkFont(size=14, weight="bold"), text_color=ORANGE).pack(pady=(20, 5))
+        
+        rule_frame = ctk.CTkFrame(tab_general, fg_color=GLOW_BLACK, corner_radius=10)
+        rule_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Rule 1: Lossless sources
+        r1 = ctk.CTkFrame(rule_frame, fg_color="transparent")
+        r1.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(r1, text="If source is Lossless:").pack(side="left")
+        self.lossless_pref = ctk.StringVar(value=getattr(self, "pref_lossless", "FLAC"))
+        ctk.CTkOptionMenu(r1, values=["FLAC", "MP3 (320)"], variable=self.lossless_pref, width=120, fg_color=MID_GREY).pack(side="right")
 
-        info_frame = ctk.CTkFrame(settings_window, fg_color=MID_GREY, corner_radius=10)
-        info_frame.pack(fill="x", padx=20, pady=20)
-        ctk.CTkLabel(info_frame, text="💡 Tip: Disable FX if logging in via a slow X11/SSH connection.\nThis prevents terminal/log lag.", 
-                     justify="left", text_color="#cccccc", font=ctk.CTkFont(size=11)).pack(padx=10, pady=10)
+        # Rule 2: Lossy sources
+        r2 = ctk.CTkFrame(rule_frame, fg_color="transparent")
+        r2.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(r2, text="If source is Lossy:").pack(side="left")
+        ctk.CTkLabel(r2, text="Auto-force MP3 (No Upscaling)", text_color="#777", font=ctk.CTkFont(size=11, slant="italic")).pack(side="right")
+
+        # Audio Quality Selection
+        qual_frame = ctk.CTkFrame(tab_general, fg_color="transparent")
+        qual_frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkLabel(qual_frame, text="Sync Quality:", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=10)
+        
+        self.quality_var = ctk.StringVar(value=getattr(self, "audio_quality", "High (FLAC)"))
+        qual_menu = ctk.CTkOptionMenu(qual_frame, values=["Low (MP3)", "High (FLAC)", "Max (24-bit FLAC)"], variable=self.quality_var, fg_color=MID_GREY, button_color=ORANGE)
+        qual_menu.pack(side="left", expand=True, fill="x", padx=10)
+
+        # NIEUW: Smart Gain Control
+        ctk.CTkLabel(tab_general, text="Smart Gain Control (Normalization)", font=ctk.CTkFont(size=14, weight="bold"), text_color=ORANGE).pack(pady=(20, 5))
+        gain_frame = ctk.CTkFrame(tab_general, fg_color=GLOW_BLACK, corner_radius=10)
+        gain_frame.pack(fill="x", padx=10, pady=5)
+        
+        g1 = ctk.CTkFrame(gain_frame, fg_color="transparent")
+        g1.pack(fill="x", padx=10, pady=5)
+        self.gain_enabled = ctk.BooleanVar(value=getattr(self, "pref_gain_enabled", False))
+        ctk.CTkSwitch(g1, text="Enable Smart Normalization", variable=self.gain_enabled, progress_color=ORANGE).pack(side="left")
+        
+        # PRO MODE: Interactive Numeric Values
+        self.gain_target = ctk.StringVar(value=getattr(self, "pref_gain_target", "-14.0 LUFS"))
+        
+        def toggle_mode():
+            if "LUFS" in self.gain_target.get():
+                self.gain_target.set("0.0 dB")
+                self.gain_scroller.unit = "dB"; self.gain_scroller.min_val = -12.0; self.gain_scroller.max_val = 0.0; self.gain_scroller.step = 0.1
+            else:
+                self.gain_target.set("-14.0 LUFS")
+                self.gain_scroller.unit = "LUFS"; self.gain_scroller.min_val = -24.0; self.gain_scroller.max_val = -6.0; self.gain_scroller.step = 0.5
+        
+        mode_btn = ctk.CTkButton(g1, text="Mode", width=60, fg_color=MID_GREY, command=toggle_mode)
+        mode_btn.pack(side="right", padx=5)
+        
+        # Determine initial scroller settings
+        is_db = "dB" in self.gain_target.get()
+        unit = "dB" if is_db else "LUFS"
+        min_v = -12.0 if is_db else -24.0
+        max_v = 0.0 if is_db else -6.0
+        step = 0.1 if is_db else 0.5
+        
+        self.gain_scroller = InteractiveValue(g1, self.gain_target, unit=unit, min_val=min_v, max_val=max_v, step=step, font=ctk.CTkFont(size=16, weight="bold"))
+        self.gain_scroller.pack(side="right", padx=10)
+
+        # TAB 2: CONNECTIONS (The chique browser-first approach)
+        tab_conn = tabview.add("Connections")
+        
+        ctk.CTkLabel(tab_conn, text="🌐 Universal Browser Authentication", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE).pack(pady=(10, 5))
+        ctk.CTkLabel(tab_conn, text="Use your active browser session to bypass captchas and API keys.", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 15))
+
+        # Primary Browser Selection
+        browser_frame = ctk.CTkFrame(tab_conn, fg_color=GLOW_BLACK, corner_radius=10)
+        browser_frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkLabel(browser_frame, text="Auth Browser:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=15, pady=15)
+        
+        def on_browser_change(choice):
+            self.cookies_browser = choice
+            self.event_generate("<<RefreshStatusesEvent>>")
+
+        browser_options = ["none", "chrome", "firefox", "safari", "edge", "opera", "vivaldi", "brave"]
+        browser_menu = ctk.CTkOptionMenu(browser_frame, values=browser_options, fg_color=MID_GREY, button_color=ORANGE, button_hover_color="#cc7000", command=on_browser_change)
+        browser_menu.pack(side="left", expand=True, fill="x", padx=10)
+        browser_menu.set(self.cookies_browser)
+
+        # Service Grid
+        services_frame = ctk.CTkFrame(tab_conn, fg_color="transparent")
+        services_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.service_status_labels = {}
+
+        def draw_browser_service(parent, name, url):
+            row = ctk.CTkFrame(parent, fg_color=MID_GREY, corner_radius=8, height=45)
+            row.pack(fill="x", pady=4)
+            
+            ctk.CTkLabel(row, text=name, font=ctk.CTkFont(weight="bold"), width=120).pack(side="left", padx=15)
+            
+            # Status Indicator
+            status_label = ctk.CTkLabel(row, text="CHECKING...", text_color="#777777", font=ctk.CTkFont(size=11, weight="bold"))
+            status_label.pack(side="left", padx=10)
+            self.service_status_labels[name.lower()] = status_label
+            
+            def open_link():
+                import webbrowser
+                webbrowser.open(url)
+            
+            ctk.CTkButton(row, text="Login in Browser", width=120, fg_color="transparent", border_width=1, border_color=ORANGE, command=open_link).pack(side="right", padx=10, pady=5)
+
+        draw_browser_service(services_frame, "Tidal", "https://listen.tidal.com")
+        draw_browser_service(services_frame, "Spotify", "https://open.spotify.com")
+        draw_browser_service(services_frame, "Bandcamp", "https://bandcamp.com")
+        draw_browser_service(services_frame, "SoundCloud", "https://soundcloud.com")
+
+        def periodic_status_check():
+            if settings_window.winfo_exists():
+                self.event_generate("<<RefreshStatusesEvent>>")
+                settings_window.after(3000, periodic_status_check)
+        
+        settings_window.after(100, periodic_status_check)
+
+        # TAB 3: ADVANCED
+        tab_adv = tabview.add("Advanced")
+        ctk.CTkLabel(tab_adv, text="Manual API Keys (Optional)", font=ctk.CTkFont(size=14, weight="bold"), text_color=ORANGE).pack(pady=10)
+        
+        # Help link voor Spotify
+        def open_spotify_dev():
+            import webbrowser
+            webbrowser.open("https://developer.spotify.com/dashboard")
+            
+        help_label = ctk.CTkLabel(tab_adv, text="Where do I find my Spotify Keys?", font=ctk.CTkFont(size=11, underline=True), text_color="#3498db", cursor="hand2")
+        help_label.pack(pady=(0, 10))
+        help_label.bind("<Button-1>", lambda e: open_spotify_dev())
+
+        # Spotify ID
+        ctk.CTkLabel(tab_adv, text="Spotify Client ID:", font=ctk.CTkFont(size=12, weight="bold"), anchor="w").pack(fill="x", padx=20, pady=(10, 0))
+        sp_id_entry = ctk.CTkEntry(tab_adv, placeholder_text="Enter ID...", border_color=ORANGE)
+        sp_id_entry.pack(fill="x", padx=20, pady=(2, 5))
+        sp_id_entry.insert(0, self.credentials.get("spotify_client_id", ""))
+        
+        # Spotify Secret
+        ctk.CTkLabel(tab_adv, text="Spotify Client Secret:", font=ctk.CTkFont(size=12, weight="bold"), anchor="w").pack(fill="x", padx=20, pady=(5, 0))
+        sp_sec_entry = ctk.CTkEntry(tab_adv, placeholder_text="Enter Secret...", show="*")
+        sp_sec_entry.pack(fill="x", padx=20, pady=(2, 5))
+        sp_sec_entry.insert(0, self.credentials.get("spotify_client_secret", ""))
+        
+        # Bandcamp User
+        ctk.CTkLabel(tab_adv, text="Bandcamp Username:", font=ctk.CTkFont(size=12, weight="bold"), anchor="w").pack(fill="x", padx=20, pady=(5, 0))
+        bc_user_entry = ctk.CTkEntry(tab_adv, placeholder_text="Enter Username...")
+        bc_user_entry.pack(fill="x", padx=20, pady=(2, 10))
+        bc_user_entry.insert(0, self.credentials.get("bandcamp_username", ""))
 
         def save_and_close():
-            new_path = path_entry.get().strip()
-            self.fx_enabled = bool(fx_switch.get())
+            self.core.download_path = path_entry.get().strip()
+            self.cookies_browser = browser_menu.get()
+            self.audio_quality = self.quality_var.get()
+            self.pref_gain_enabled = self.gain_enabled.get()
+            self.pref_gain_target = self.gain_target.get()
             
-            if new_path:
-                self.core.download_path = new_path
-                if not os.path.exists(new_path):
-                    try:
-                        os.makedirs(new_path)
-                    except:
-                        pass
-                try:
-                    with open(CONFIG_FILE, 'w') as f:
-                        import json
-                        json.dump({
-                            "download_path": new_path,
-                            "fx_enabled": self.fx_enabled
-                        }, f, indent=4)
-                    self.log_message(f">> SETTINGS: Saved. FX is {'ON' if self.fx_enabled else 'OFF'}.")
-                except Exception as e:
-                    self.log_message(f">> SETTINGS ERROR: Could not save config. {e}")
+            self.credentials["spotify_client_id"] = sp_id_entry.get().strip()
+            self.credentials["spotify_client_secret"] = sp_sec_entry.get().strip()
+            self.credentials["bandcamp_username"] = bc_user_entry.get().strip()
             
-            # Stuur een custom event naar de controller dat settings zijn geupdate
+            self.save_config()
             self.event_generate("<<SettingsUpdated>>")
             settings_window.destroy()
 
-        ctk.CTkButton(settings_window, text="Save & Close", fg_color=ORANGE, text_color="black", hover_color="#cc7000", font=ctk.CTkFont(weight="bold"), command=save_and_close).pack(pady=(0, 20))
+        ctk.CTkButton(settings_window, text="SAVE SETTINGS", fg_color=ORANGE, text_color="black", font=ctk.CTkFont(weight="bold"), command=save_and_close).pack(pady=20)

@@ -8,3 +8,31 @@
 2026-03-14 01:32:33 | Unknown/Curator - TIDAL - High Fidelity Music Streaming | Error: [0;31mERROR:[0m [youtube] b-zr4041sBM: Sign in to confirm you’re not a bot. Use --cookies-from-browser or --cookies for the authentication. See  https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp  for how to manually pass cookies. Also see  https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies  for tips on effectively exporting YouTube cookies
 2026-03-14 01:33:56 | Unknown/Curator - TIDAL - High Fidelity Music Streaming | Error: Post-processed file not found: downloads/Unknown⧸Curator TIDAL - High Fidelity Music Streaming.flac
 2026-03-14 01:37:11 | Unknown - TIDAL - High Fidelity Music Streaming | Error: Post-processed file not found: downloads/Unknown TIDAL - High Fidelity Music Streaming.flac
+2026-03-14 02:50:28 | https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293 | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293
+2026-03-14 02:51:28 | https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293 | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293
+2026-03-14 02:59:00 | https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293 | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293
+2026-03-14 03:00:28 | https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293 | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/5d7a6aca-3c2e-4121-ace3-799f74f7b293
+2026-03-14 03:04:18 | https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC | Error: [0;31mERROR:[0m [DRM] The requested site is known to use DRM protection. It will [0;94mNOT[0m be supported.
+       Please [0;31mDO NOT[0m open an issue, unless you have evidence that the video is not DRM protected
+2026-03-14 03:04:44 | Unknown - Spotify – Web Player | Error: Post-processed file not found: downloads/Unknown Spotify – Web Player.flac
+2026-03-14 03:04:56 | https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC | Error: [0;31mERROR:[0m [DRM] The requested site is known to use DRM protection. It will [0;94mNOT[0m be supported.
+       Please [0;31mDO NOT[0m open an issue, unless you have evidence that the video is not DRM protected
+2026-03-14 03:08:32 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:12:39 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: ERROR: Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:12:55 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: ERROR: Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:13:12 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: ERROR: Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:13:52 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: ERROR: Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:14:18 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:17:52 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: ERROR: Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:32:25 | Direct - https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC | Error: [0;31mERROR:[0m [DRM] The requested site is known to use DRM protection. It will [0;94mNOT[0m be supported.
+       Please [0;31mDO NOT[0m open an issue, unless you have evidence that the video is not DRM protected
+2026-03-14 03:51:17 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:51:33 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:53:08 | Direct - https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d | Error: [0;31mERROR:[0m Unsupported URL: https://tidal.com/playlist/7bc065b4-a3aa-4552-8adf-79db7e706f6d
+2026-03-14 03:57:59 | Syran - Crazy Fruits | Error: Post-processed file not found: downloads/Syran Crazy Fruits.flac
+2026-03-14 03:58:10 | Mefjus - Step Back | Error: Post-processed file not found: downloads/Mefjus Step Back.flac
+2026-03-14 03:58:18 | Reso - Nut Damage | Error: Post-processed file not found: downloads/Reso Nut Damage.flac
+2026-03-14 03:58:26 | Sitri - Space Invaders | Error: Post-processed file not found: downloads/Sitri Space Invaders.flac
+2026-03-14 04:00:24 | Direct - file:///home/flark/Pictures/Screenshots/Screenshot_20260314_035817.png | Error: file:// URLs are disabled by default in yt-dlp for security reasons. Use --enable-file-urls to enable at your own risk.
+2026-03-14 04:22:50 | Search - https://soundcloud.com/flark/bong-ra-the-claw-ft-ras-bumpa | Error: list index out of range
+2026-03-14 04:23:08 | Search - https://soundcloud.com/flark/bong-ra-the-claw-ft-ras-bumpa | Error: list index out of range

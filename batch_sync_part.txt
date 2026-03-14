@@ -1,0 +1,91 @@
+    def _run_download_batch(self, tracks):
+        """De daadwerkelijke download loop voor een lijst geselecteerde tracks."""
+        self.status = "Downloading"
+        cookies_browser = getattr(self.view, "cookies_browser", "none")
+        
+        # Gebruikersvoorkeur uit de GUI
+        quality_setting = self.view.format_var.get()
+        preferred_format = "flac" if "FLAC" in quality_setting else "mp3"
+
+        # Bepaal de playlist map
+        playlist_folder = None
+        if tracks and tracks[0].get('is_playlist'):
+            playlist_folder = tracks[0].get('album', 'Unknown Playlist').replace("/", "_").replace("", "_")
+            self.last_playlist_path = os.path.join(self.core.download_path, playlist_folder)
+
+        try:
+            for idx, track_data in enumerate(tracks, 1):
+                is_direct = track_data.get("is_direct", False)
+                url = track_data.get('url') or (track_data['title'] if is_direct else f"scsearch:{track_data['artist']} {track_data['title']}")
+
+                # --- SMART QUALITY LOGIC ---
+                target_format = preferred_format
+                is_source_lossless = track_data.get('is_lossless', False)
+                
+                if preferred_format == "flac" and not is_source_lossless:
+                    target_format = "mp3"
+                    self.ui_log(f"
+> [SMART SYNC] {track_data['title']}: SOURCE IS LOSSY.")
+                    self.ui_log(f"> FORCING MP3 TO PREVENT FAKE FLAC.")
+                
+                # TERMINAL: Toon gedetailleerde info
+                self.ui_log(f"
+> SYNCING [{idx:03d}/{len(tracks):03d}]: {track_data['artist']} - {track_data['title']} ({target_format.upper()})")
+                if 'bpm' in track_data and track_data['bpm']:
+                    self.ui_log(f"> METADATA: {track_data['bpm']} BPM | Key: {track_data.get('key', 'N/A')}")
+
+                # DEDUPLICATIE CHECK (nu ook in de submap)
+                if not is_direct and self.core.is_track_downloaded(track_data['artist'], track_data['title'], format_choice=target_format, playlist_folder=playlist_folder):
+                    self.ui_log(f"> SKIPPING: Already exists in library.")
+                    continue
+
+                # SAFETY SLEEP
+                if idx > 1: time.sleep(2.0)
+
+                success, result, s_info = self.core.download_track(
+                    url, 
+                    format_choice=target_format, 
+                    progress_callback=self.download_progress_hook,
+                    cookies_from_browser=cookies_browser,
+                    playlist_folder=playlist_folder,
+                    index=idx
+                )
+                
+                if success:
+                    # LOG SOURCE QUALITY
+                    abr = s_info.get('abr', 0)
+                    codec = s_info.get('acodec', 'unknown')
+                    self.ui_log(f"> SOURCE: {codec.upper()} @ {abr} kbps")
+                    
+                    self.status = "Syncing"
+                    self.ui_log("> EMBEDDING METADATA...")
+                    
+                    self.core.update_metadata(
+                        result, 
+                        artist=track_data['artist'], 
+                        title=track_data['title'],
+                        bpm=track_data.get('bpm'),
+                        key=track_data.get('key')
+                    )
+                    
+                    self.rb_xml.add_track(
+                        path=os.path.abspath(result),
+                        artist=track_data['artist'],
+                        title=track_data['title'],
+                        bpm=track_data.get('bpm', 120.0),
+                        key=track_data.get('key', '')
+                    )
+                    self.rb_xml.save()
+                    self.ui_log(f"> [SUCCESS] Registered in library.xml")
+                else:
+                    self.ui_log(f"> [FAILED] {result}")
+                    self.log_failed_sync(f"{track_data['artist']} - {track_data['title']}", result)
+
+        except Exception as e:
+            self.status = "Error"
+            self.ui_log(f">> [FATAL] Batch sync crashte: {e}")
+        
+        finally:
+            self.status = "Idle"
+            self.ui_log("
+[SYSTEM] BATCH SYNC OPERATION FINISHED.")

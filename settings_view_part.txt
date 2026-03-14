@@ -1,0 +1,97 @@
+    def settings_event(self):
+        settings_window = ctk.CTkToplevel(self)
+        settings_window.title("DJwerk - Settings Cockpit")
+        settings_window.geometry("600x600")
+        settings_window.configure(fg_color=DARK_GREY)
+        settings_window.attributes("-topmost", True)
+        
+        # Tabview for organization
+        tabview = ctk.CTkTabview(settings_window, fg_color=MID_GREY, segmented_button_selected_color=ORANGE, segmented_button_selected_hover_color="#cc7000")
+        tabview.pack(fill="both", expand=True, padx=20, pady=(10, 20))
+        
+        # TAB 1: GENERAL
+        tab_general = tabview.add("General")
+        ctk.CTkLabel(tab_general, text="Main Crate & UI Settings", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE).pack(pady=(10, 20))
+        
+        path_frame = ctk.CTkFrame(tab_general, fg_color="transparent")
+        path_frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkLabel(path_frame, text="Download Path:", font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=(0, 10))
+        path_entry = ctk.CTkEntry(path_frame, text_color="#ffffff", fg_color=GLOW_BLACK, border_color=ORANGE)
+        path_entry.pack(side="left", expand=True, fill="x", padx=(0, 10))
+        path_entry.insert(0, self.core.download_path)
+
+        def browse_folder():
+            from customtkinter import filedialog
+            folder = filedialog.askdirectory(initialdir=self.core.download_path)
+            if folder:
+                path_entry.delete(0, 'end'); path_entry.insert(0, folder)
+
+        ctk.CTkButton(path_frame, text="Browse", width=70, fg_color=MID_GREY, command=browse_folder).pack(side="right")
+
+        # FX Toggle
+        fx_frame = ctk.CTkFrame(tab_general, fg_color="transparent")
+        fx_frame.pack(fill="x", padx=10, pady=10)
+        fx_switch = ctk.CTkSwitch(fx_frame, text="Enable GUI Glow/Visualizer FX", text_color="#ffffff", font=ctk.CTkFont(size=14, weight="bold"), progress_color=ORANGE)
+        fx_switch.pack(side="left", padx=10)
+        if self.fx_enabled: fx_switch.select()
+
+        # TAB 2: CONNECTIONS (The chique browser-first approach)
+        tab_conn = tabview.add("Connections")
+        
+        ctk.CTkLabel(tab_conn, text="🌐 Universal Browser Authentication", font=ctk.CTkFont(size=16, weight="bold"), text_color=ORANGE).pack(pady=(10, 5))
+        ctk.CTkLabel(tab_conn, text="Use your active browser session to bypass captchas and API keys.", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 15))
+
+        # Primary Browser Selection
+        browser_frame = ctk.CTkFrame(tab_conn, fg_color=GLOW_BLACK, corner_radius=10)
+        browser_frame.pack(fill="x", padx=10, pady=10)
+        ctk.CTkLabel(browser_frame, text="Auth Browser:", font=ctk.CTkFont(weight="bold")).pack(side="left", padx=15, pady=15)
+        
+        browser_options = ["none", "chrome", "firefox", "safari", "edge", "opera", "vivaldi", "brave"]
+        browser_menu = ctk.CTkOptionMenu(browser_frame, values=browser_options, fg_color=MID_GREY, button_color=ORANGE, button_hover_color="#cc7000")
+        browser_menu.pack(side="left", expand=True, fill="x", padx=10)
+        browser_menu.set(self.cookies_browser)
+
+        # Service Grid
+        services_frame = ctk.CTkFrame(tab_conn, fg_color="transparent")
+        services_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        def draw_browser_service(parent, name, url):
+            row = ctk.CTkFrame(parent, fg_color=MID_GREY, corner_radius=8, height=40)
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(row, text=name, font=ctk.CTkFont(weight="bold"), width=100).pack(side="left", padx=15)
+            
+            def open_link():
+                import webbrowser
+                webbrowser.open(url)
+            
+            ctk.CTkButton(row, text="Login in Browser", width=120, fg_color="transparent", border_width=1, border_color=ORANGE, command=open_link).pack(side="right", padx=10, pady=5)
+
+        draw_browser_service(services_frame, "Tidal", "https://listen.tidal.com")
+        draw_browser_service(services_frame, "Spotify", "https://open.spotify.com")
+        draw_browser_service(services_frame, "Bandcamp", "https://bandcamp.com")
+        draw_browser_service(services_frame, "SoundCloud", "https://soundcloud.com")
+
+        # TAB 3: ADVANCED
+        tab_adv = tabview.add("Advanced")
+        ctk.CTkLabel(tab_adv, text="Manual API Keys (Optional)", font=ctk.CTkFont(size=14, weight="bold")).pack(pady=10)
+        
+        sp_id_entry = ctk.CTkEntry(tab_adv, placeholder_text="Spotify Client ID")
+        sp_id_entry.pack(fill="x", padx=20, pady=5)
+        sp_id_entry.insert(0, self.credentials.get("spotify_client_id", ""))
+        
+        sp_sec_entry = ctk.CTkEntry(tab_adv, placeholder_text="Spotify Client Secret", show="*")
+        sp_sec_entry.pack(fill="x", padx=20, pady=5)
+        sp_sec_entry.insert(0, self.credentials.get("spotify_client_secret", ""))
+
+        def save_and_close():
+            self.core.download_path = path_entry.get().strip()
+            self.fx_enabled = bool(fx_switch.get())
+            self.cookies_browser = browser_menu.get()
+            self.credentials["spotify_client_id"] = sp_id_entry.get().strip()
+            self.credentials["spotify_client_secret"] = sp_sec_entry.get().strip()
+            
+            self.save_config()
+            self.event_generate("<<SettingsUpdated>>")
+            settings_window.destroy()
+
+        ctk.CTkButton(settings_window, text="SAVE SETTINGS", fg_color=ORANGE, text_color="black", font=ctk.CTkFont(weight="bold"), command=save_and_close).pack(pady=20)

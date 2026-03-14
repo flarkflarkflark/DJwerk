@@ -1,47 +1,54 @@
-# De Ultieme DJwerk Handleiding 🎧
+# The Ultimate DJwerk Manual 🎧
 
-Welkom bij **DJwerk**, de universele crate engine van flarkAUDIO die de kloof overbrugt tussen vloeibare cloud-muziek en solide fysieke DJ-bibliotheken.
+Welcome to **DJwerk**, the universal crate engine by flarkAUDIO that bridges the gap between liquid cloud music and solid physical DJ libraries.
 
-## Wat is DJwerk?
-DJwerk is een autonome tool ontworpen voor DJ's die hun bibliotheek willen synchroniseren tussen verschillende platforms. Het downloadt tracks met de hoogst mogelijke kwaliteit (FLAC of MP3 320kbps), embedt metadata en cover art, en werkt direct je Pioneer Rekordbox en Engine DJ bibliotheken bij.
+## What is DJwerk?
+DJwerk is an autonomous tool designed for DJs who want to sync their libraries across different platforms. It downloads tracks with the highest possible quality (FLAC or MP3 320kbps), embeds rich metadata and cover art, and updates your DJ software databases directly.
 
-## Hoe gebruik je de Universal Sync?
-1. Kopieer de URL van een Spotify playlist, album of track.
-2. Plak de URL in de balk bovenaan in het DJwerk paneel.
-3. Klik op **Sync Crate**.
-4. DJwerk analyseert de bron, zoekt de beste kwaliteit match en downloadt de tracks naar de `downloads/` map.
-5. Metadata zoals BPM, Key en Cover Art worden automatisch ingebakken.
+## Using Universal Sync & YOLO Mode
+1. **URL Sync:** Copy a URL from Tidal, Spotify, SoundCloud, Bandcamp, or Beatport and paste it into the main entry.
+2. **YOLO Mode:** Copy a raw block of text (like a tracklist from a website) and click **PASTE & SYNC CRATE**. DJwerk will intelligently filter out the noise and find the best matches.
+3. **Selector:** In the **Crate Selector** window, you can filter tracks, see their duration, and choose your preferred output format.
+4. **Processing:** DJwerk will sync the tracks, embed BPM/Key/Art, and apply your chosen normalization.
 
-## Pioneer Rekordbox Integratie
-DJwerk genereert automatisch een `rekordbox.xml` bestand in de hoofdmap.
-1. Open Pioneer Rekordbox.
-2. Ga naar **Preferences** -> **Advanced** -> **Database**.
-3. Bij **rekordbox xml**, selecteer het `rekordbox.xml` bestand in je DJwerk map.
-4. In de Rekordbox zijbalk verschijnt nu een sectie "rekordbox xml". Hier vind je al je gesynchroniseerde tracks klaar om te importeren in je collectie.
+## The Export Center
+Once your tracks are synced, use the **Export Center** to push them into your DJ software:
 
-## Algoriddim djay Sync
-Voor mobiele DJ's ondersteunt DJwerk sync naar Algoriddim djay.
-1. Synchroniseer je DJwerk `downloads/` map met een cloud-service zoals iCloud, Dropbox of Google Drive.
-2. Open djay op je iPad of iPhone.
-3. Ga naar de **Files** bron en navigeer naar je gesynchroniseerde map.
-4. De tracks zijn direct laadbaar met alle metadata die door DJwerk is toegevoegd.
+### 1. Pioneer Rekordbox
+DJwerk generates a `library.xml` file.
+- In Rekordbox, go to **Preferences** -> **View** and enable **rekordbox xml**.
+- Point the XML location to the `library.xml` in your DJwerk folder.
+- Your crates will appear in the "rekordbox xml" section of the sidebar.
 
-## Engine DJ (Denon/Numark) Integratie
-DJwerk schrijft tracks direct weg naar een Engine-compatibele database (`m.db`).
-1. Sluit je Engine DJ device (zoals een Prime Go of USB-stick) aan op je computer.
-2. Kopieer het bestand `m.db` uit de DJwerk map naar de map `Engine Library/` op je device.
-3. De tracks staan nu direct in de bibliotheek van je hardware, inclusief cues en metadata.
+### 2. Denon / Engine DJ
+DJwerk can inject tracks directly into the `m.db` database.
+- Connect your Engine DJ device (USB or HDD).
+- Use the Export Center to push tracks to the database on your drive.
+- Tracks appear instantly on your hardware (Prime Go, SC6000, etc.) without a re-scan.
 
-## STEMwerk Integratie (Upcoming)
-Met de **Auto-Stem Sync** schakelaar kun je tracks direct door de flarkAUDIO STEMwerk engine halen. Hiermee worden tracks gesplitst in Vocals, Drums, Bass en Other, zodat je altijd over de stems beschikt voor je live mashups. *Opmerking: Deze feature is momenteel in de proto-link fase.*
+### 3. Mixxx (Open Source)
+DJwerk detects your Mixxx database (Standard or Flatpak) and injects tracks directly.
+- Ensure Mixxx is closed during the export.
+- Push the tracks via the Export Center.
+- Open Mixxx and your new tracks will be ready in the library.
 
-## Crate Health Reports Lezen
-Regelmatig onderhoud is essentieel voor een professionele DJ-crate. Klik op **Scan Crate Health** in de zijbalk om je downloads te controleren.
-- **Duplicates:** Tracks die dubbel aanwezig zijn (of sterk op elkaar lijken) worden gemarkeerd zodat je ruimte kunt besparen.
-- **Low Bitrate:** Tracks onder de 320kbps worden gedetecteerd. Voor club-gebruik raden we aan deze te vervangen door hogere kwaliteit.
-- **Missing Art:** Tracks zonder hoesafbeelding worden getoond, zodat je bibliotheek er op elk scherm strak uitziet.
+### 4. Algoriddim djay Pro / Serato
+DJwerk generates "Rich M3U8" playlists.
+- Drag the `_RICH.m3u8` file from your crate folder into djay Pro or Serato.
+- All metadata, including duration and tags, will be imported immediately.
 
-Alle rapporten worden opgeslagen in `REPORTS.md` voor latere referentie.
+## Pro Features
+
+### Smart Gain Control
+In **Settings -> General**, you can enable normalization. 
+- **LUFS:** Adjust the perceived loudness (Standard is -14.0).
+- **Peak:** Ensure no clipping by setting a Safety Peak (e.g., -1.0 dB).
+- **Interactive:** Scroll your mouse wheel over the value to adjust it in logical steps.
+
+### Universal Browser Authentication
+In **Settings -> Connections**, select your primary browser (e.g., Firefox). 
+- DJwerk will use your active browser session to bypass captchas and access your private playlists on SoundCloud and Spotify.
+- Look for the **CONNECTED** status to verify your session is active.
 
 ---
-*Liquid to Solid | flarkAUDIO 2024*
+*Liquid to Solid | flarkAUDIO 2026*
