@@ -1,47 +1,47 @@
 # DJwerk
 
-**DJwerk** is de universele "Physical Crate Engine" van de flarkAUDIO-suite. Het transformeert vluchtige cloud-playlists naar een robuuste, fysieke en platform-onafhankelijke muziekcollectie voor de professionele DJ.
+**DJwerk** is the universal "Physical Crate Engine" of the flarkAUDIO suite. It transforms volatile cloud playlists into a robust, physical, and platform-independent music collection for the professional DJ.
 
-## De Missie: Van Liquid naar Solid
-DJ's niet langer afhankelijk maken van Wi-Fi of streaming-abonnementen tijdens een set. DJwerk haalt muziek uit de cloud en zet deze om naar fysieke bestanden (FLAC/MP3) met universele metadata die werkt op alle hardware en software.
+## The Mission: From Liquid to Solid
+DJs should no longer be dependent on Wi-Fi or streaming subscriptions during a set. DJwerk pulls music from the cloud and converts it into physical files (FLAC/MP3) with universal metadata that works across all hardware and software.
 
-## Kernfunctionaliteiten
+## Core Features
 
-### 1. Universele Input (The Cloud Scrapers)
-- **Lossless Sources:** Native FLAC downloads van **Tidal** en **Qobuz**.
-- **Playlist Converters:** Intelligent vertalen van **Spotify** playlists naar lossless bronnen.
-- **Underground & Bootlegs:** Integratie van **SoundCloud**, **Bandcamp** en **YouTube** (via yt-dlp).
-- **DJ Stores:** Ondersteuning voor gekochte tracks van **Beatport** en **Beatsource**.
+### 1. Universal Input (The Cloud Scrapers)
+- **Lossless Sources:** Native FLAC downloads from **Tidal** and **Qobuz**.
+- **Playlist Converters:** Intelligent translation from **Spotify** playlists to lossless sources.
+- **Underground & Bootlegs:** Integration of **SoundCloud**, **Bandcamp**, and **YouTube** (via yt-dlp).
+- **DJ Stores:** Support for purchased tracks from **Beatport** and **Beatsource**.
 
-### 2. De "Crate" Engine (Processing)
-- **Normalisatie:** Alles omzetten naar jouw standaard (bijv. 44.1kHz FLAC of 320kbps MP3).
+### 2. The "Crate" Engine (Processing)
+- **Normalization:** Converts everything to your standard (e.g., 44.1kHz FLAC or 320kbps MP3).
 - **Metadata Mastery:** 
-    - Automatische analyse van **BPM** en **Key** (Camelot Wheel).
+    - Automatic analysis of **BPM** and **Key** (Camelot Wheel).
     - High-res **Album Art** embedding.
-    - Opschonen van titels (geen "Official Video" rommel).
-- **Harmonisch Mixen:** Volledige ondersteuning voor **Mixed In Key** standaarden.
-- **STEM-ready:** Optionele integratie met **STEMwerk** voor pre-separatie.
+    - Title cleanup (stripping "Official Video" junk).
+- **Harmonic Mixing:** Full support for **Mixed In Key** standards.
+- **STEM-ready:** Optional integration with **STEMwerk** for pre-separation.
 
-### 3. Universele Output (The Destinations)
+### 3. Universal Output (The Destinations)
 - **Hardware (Stand-alone):**
-    - **Engine OS (Denon/Numark/Rane):** Directe database-injectie (m.db) voor de Prime Go en SC-serie.
-    - **Pioneer DJ / AlphaTheta:** CDJ-ready USB-structuren en Rekordbox XML-export.
+    - **Engine OS (Denon/Numark/Rane):** Direct database injection (`m.db`) for the Prime Go and SC-series.
+    - **Pioneer DJ / AlphaTheta:** CDJ-ready USB structures and Rekordbox XML export.
 - **Software (Performance):**
-    - **Algoriddim djay:** Mobile-ready sync voor iPad/iPhone (iCloud/Files).
-    - **Rekordbox, Serato, Traktor, VirtualDJ, Mixxx:** Universele XML en M3U8 playlists.
+    - **Algoriddim djay:** Mobile-ready sync for iPad/iPhone (iCloud/Files).
+    - **Rekordbox, Serato, Traktor, VirtualDJ, Mixxx:** Universal XML and M3U8 playlists.
 - **Creative:**
-    - **Ableton Live:** Automatisch gewarpte tracks en project-exports.
-    - **Lexicon:** Compatibiliteit voor geavanceerd bibliotheekbeheer.
+    - **Ableton Live:** Automatically warped tracks and project exports.
+    - **Lexicon:** Compatibility for advanced library management.
 
-## Technische Roadmap
-1. **v0.1.0:** Tidal naar Engine DJ (Denon Prime Go) basis-sync.
+## Technical Roadmap
+1. **v0.1.0:** Tidal to Engine DJ (Denon Prime Go) basic sync.
 2. **v0.2.0:** Spotify Playlist Parser & Metadata Enrichment.
 3. **v0.3.0:** Pioneer/Rekordbox XML Export & SoundCloud support.
-4. **v0.4.0:** djay Mobile Sync & STEMwerk integratie.
+4. **v0.4.0:** djay Mobile Sync & STEMwerk integration.
 
 ## Contact
-- **Auteur:** flarkAUDIO <flarkaudio@pm.me>
+- **Author:** flarkAUDIO <flarkaudio@pm.me>
 - **GitHub:** [flarkflarkflark](https://github.com/flarkflarkflark)
 
 ---
-*Onderdeel van de flarkAUDIO werk-suite.*
+*Part of the flarkAUDIO work suite.*
