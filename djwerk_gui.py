@@ -6,6 +6,21 @@ import platform
 import subprocess
 import json
 
+def safe_open_url(url):
+    """Opens a URL while ensuring PyInstaller/AppImage libraries don't conflict with system browser."""
+    import os, platform, subprocess, webbrowser
+    if platform.system() == "Windows":
+        webbrowser.open(url)
+    else:
+        env = os.environ.copy()
+        if "LD_LIBRARY_PATH" in env:
+            del env["LD_LIBRARY_PATH"]
+        try:
+            cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+            subprocess.Popen([cmd, url], env=env)
+        except:
+            webbrowser.open(url)
+
 ORANGE = "#FF8C00"
 DARK_GREY = "#1a1a1a"
 MID_GREY = "#2b2b2b"
@@ -533,10 +548,12 @@ class DJwerkApp(ctk.CTk):
         dl_path = self.core.download_path
         if platform.system() == "Windows":
             os.startfile(dl_path)
-        elif platform.system() == "Darwin":
-            subprocess.call(["open", dl_path])
         else:
-            subprocess.call(["xdg-open", dl_path])
+            env = os.environ.copy()
+            if "LD_LIBRARY_PATH" in env:
+                del env["LD_LIBRARY_PATH"]
+            cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+            subprocess.Popen([cmd, dl_path], env=env)
 
     def export_center_event(self):
         export_window = ExportCenterWindow(self)
@@ -750,8 +767,7 @@ class DJwerkApp(ctk.CTk):
             self.service_account_labels[name.lower()] = acc_label
             
             def open_link():
-                import webbrowser
-                webbrowser.open(url)
+                safe_open_url(url)
             
             def logout_service():
                 self.event_generate(f"<<Logout{name}Event>>")
@@ -778,8 +794,7 @@ class DJwerkApp(ctk.CTk):
         
         # Help link voor Spotify
         def open_spotify_dev():
-            import webbrowser
-            webbrowser.open("https://developer.spotify.com/dashboard")
+            safe_open_url("https://developer.spotify.com/dashboard")
             
         help_label = ctk.CTkLabel(tab_adv, text="Where do I find my Spotify Keys?", font=ctk.CTkFont(size=11, underline=True), text_color="#3498db", cursor="hand2")
         help_label.pack(pady=(0, 10))

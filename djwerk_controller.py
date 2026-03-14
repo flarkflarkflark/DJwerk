@@ -12,6 +12,21 @@ from rekordbox_xml import RekordboxXMLGenerator
 from crate_health import CrateHealthScanner
 from engine_integrity import DatabaseValidator
 
+def safe_open_url(url):
+    """Opens a URL while ensuring PyInstaller/AppImage libraries don't conflict with system browser."""
+    import os, platform, subprocess, webbrowser
+    if platform.system() == "Windows":
+        webbrowser.open(url)
+    else:
+        env = os.environ.copy()
+        if "LD_LIBRARY_PATH" in env:
+            del env["LD_LIBRARY_PATH"]
+        try:
+            cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+            subprocess.Popen([cmd, url], env=env)
+        except:
+            webbrowser.open(url)
+
 class DJwerkController:
     """The Controller in DJwerk's MVC pattern."""
 
@@ -168,8 +183,7 @@ class DJwerkController:
 
     def connect_tidal(self):
         def on_login_details(link, code):
-            import webbrowser
-            webbrowser.open(link, new=2)
+            safe_open_url(link)
             if hasattr(self.view, "after"):
                 self.view.after(0, self.view.show_tidal_login, link, code, None)
         thread = threading.Thread(target=self.tidal_api.start_login_flow, args=(on_login_details,))
@@ -178,8 +192,7 @@ class DJwerkController:
 
     def connect_spotify(self):
         auth_url = self.spotify_api.get_auth_url()
-        import webbrowser
-        webbrowser.open(auth_url)
+        safe_open_url(auth_url)
 
     def connect_bandcamp(self):
         import customtkinter as ctk
@@ -198,10 +211,14 @@ class DJwerkController:
         try:
             if platform.system() == "Windows":
                 os.startfile(target_path)
-            elif platform.system() == "Darwin":
-                subprocess.call(["open", target_path])
             else:
-                subprocess.call(["xdg-open", target_path])
+                # Clean env for Linux AppImage / PyInstaller to avoid library conflicts
+                env = os.environ.copy()
+                if "LD_LIBRARY_PATH" in env:
+                    del env["LD_LIBRARY_PATH"]
+                
+                cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+                subprocess.Popen([cmd, target_path], env=env)
         except Exception as e:
             self.ui_log(f">> [ERROR] COULD NOT OPEN FOLDER: {e}")
 
@@ -316,8 +333,7 @@ class DJwerkController:
 
         if "tidal.com" in url and not self.tidal_api.check_login():
             def on_login_details(link, code):
-                import webbrowser
-                webbrowser.open(link, new=2)
+                safe_open_url(link)
                 if hasattr(self.view, "after"): self.view.after(0, self.view.show_tidal_login, link, code, None)
             if not self.tidal_api.start_login_flow(on_login_details):
                 self.status = "Idle"; return
@@ -509,5 +525,16 @@ class DJwerkController:
     def open_downloads_folder(self):
         import platform, subprocess
         dl_path = self.core.download_path
-        cmd = "xdg-open" if platform.system() == "Linux" else "open" if platform.system() == "Darwin" else "start"
-        subprocess.call([cmd, dl_path])
+        
+        try:
+            if platform.system() == "Windows":
+                os.startfile(dl_path)
+            else:
+                env = os.environ.copy()
+                if "LD_LIBRARY_PATH" in env:
+                    del env["LD_LIBRARY_PATH"]
+                
+                cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+                subprocess.Popen([cmd, dl_path], env=env)
+        except Exception as e:
+            self.ui_log(f">> [ERROR] COULD NOT OPEN DOWNLOADS: {e}")
