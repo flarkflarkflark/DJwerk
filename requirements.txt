@@ -1,0 +1,9 @@
+customtkinter
+Pillow
+yt-dlp
+requests
+mutagen
+bandcamp_api
+spotipy
+tidalapi
+pyinstaller
