@@ -64,7 +64,7 @@
                 import webbrowser
                 webbrowser.open(url)
             
-            ctk.CTkButton(row, text="Login in Browser", width=120, fg_color="transparent", border_width=1, border_color=ORANGE, command=open_link).pack(side="right", padx=10, pady=5)
+            ctk.CTkButton(row, text="Login in Browser", width=120, fg_color=MID_GREY, border_width=1, border_color=ORANGE, command=open_link).pack(side="right", padx=10, pady=5)
 
         draw_browser_service(services_frame, "Tidal", "https://listen.tidal.com")
         draw_browser_service(services_frame, "Spotify", "https://open.spotify.com")

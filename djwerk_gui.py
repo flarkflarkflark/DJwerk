@@ -266,15 +266,15 @@ class DJwerkApp(ctk.CTk):
         self.cancel_btn.pack(padx=20, pady=(0, 10), fill="x")
         CTKToolTip(self.cancel_btn, "Halt all active synchronization processes (ESC)")
 
-        self.export_btn = ctk.CTkButton(self.sidebar, text="EXPORT CENTER", fg_color="transparent", border_width=1, border_color="#3498db", text_color="#3498db", font=ctk.CTkFont(weight="bold"), command=self.export_center_event)
+        self.export_btn = ctk.CTkButton(self.sidebar, text="EXPORT CENTER", fg_color=MID_GREY, border_width=1, border_color="#3498db", text_color="#3498db", font=ctk.CTkFont(weight="bold"), command=self.export_center_event)
         self.export_btn.pack(padx=20, pady=10, fill="x")
         CTKToolTip(self.export_btn, "Push your collection to Rekordbox, Engine DJ, Mixxx or djay")
 
-        self.downloads_btn = ctk.CTkButton(self.sidebar, text="Open Downloads", fg_color="transparent", border_width=1, border_color=ORANGE, command=self.open_downloads)
+        self.downloads_btn = ctk.CTkButton(self.sidebar, text="Open Downloads", fg_color=MID_GREY, border_width=1, border_color=ORANGE, command=self.open_downloads)
         self.downloads_btn.pack(padx=20, pady=10, fill="x")
         CTKToolTip(self.downloads_btn, "Open your local DJ library folder")
 
-        self.help_btn = ctk.CTkButton(self.sidebar, text="Help & Manual", fg_color="transparent", command=self.help_event)
+        self.help_btn = ctk.CTkButton(self.sidebar, text="Help & Manual", fg_color=MID_GREY, command=self.help_event)
         self.help_btn.pack(side="bottom", pady=(5, 20))
         CTKToolTip(self.help_btn, "Show usage instructions and platform tips")
 
@@ -349,7 +349,7 @@ class DJwerkApp(ctk.CTk):
             self.history_var.set("RECENT PLAYLISTS")
 
         self.history_menu = ctk.CTkOptionMenu(self.action_bar, values=history_values, variable=self.history_var, 
-                                             command=on_history_select, fg_color="transparent", 
+                                             command=on_history_select, fg_color=MID_GREY, 
                                              button_color=ORANGE, button_hover_color="#cc7000",
                                              text_color=ORANGE, dynamic_resizing=False, width=250)
         self.history_menu.pack(side="right")
@@ -361,7 +361,7 @@ class DJwerkApp(ctk.CTk):
         self.terminal_frame.grid_columnconfigure(0, weight=1)
         self.terminal_frame.grid_rowconfigure(1, weight=1)
 
-        self.crate_log = ctk.CTkTextbox(self.terminal_frame, fg_color="transparent", text_color="#00FF00", font=ctk.CTkFont(family="Consolas", size=13))
+        self.crate_log = ctk.CTkTextbox(self.terminal_frame, fg_color=GLOW_BLACK, text_color="#00FF00", font=ctk.CTkFont(family="Consolas", size=13))
         self.crate_log.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         
         # Configure color tags for the terminal
@@ -395,7 +395,7 @@ class DJwerkApp(ctk.CTk):
         ctk.CTkLabel(login_window, text="Activate this device to sync lossless tracks directly.", font=ctk.CTkFont(size=12), text_color="#aaaaaa").pack(pady=(0, 30))
         
         ctk.CTkLabel(login_window, text="Go to:", font=ctk.CTkFont(size=14)).pack()
-        link_btn = ctk.CTkButton(login_window, text=link, fg_color="transparent", text_color=ORANGE, hover_color=MID_GREY, command=self.open_downloads)
+        link_btn = ctk.CTkButton(login_window, text=link, fg_color=DARK_GREY, text_color=ORANGE, hover_color=MID_GREY, command=self.open_downloads)
         link_btn.pack(pady=(0, 20))
         
         ctk.CTkLabel(login_window, text="Enter this code:", font=ctk.CTkFont(size=14)).pack()
@@ -757,7 +757,7 @@ class DJwerkApp(ctk.CTk):
                 self.event_generate(f"<<Logout{name}Event>>")
 
             ctk.CTkButton(row, text="Logout", width=60, fg_color="#444", text_color="#aaa", command=logout_service).pack(side="right", padx=5, pady=5)
-            ctk.CTkButton(row, text="Login", width=60, fg_color="transparent", border_width=1, border_color=ORANGE, command=open_link).pack(side="right", padx=5, pady=5)
+            ctk.CTkButton(row, text="Login", width=60, fg_color=MID_GREY, border_width=1, border_color=ORANGE, command=open_link).pack(side="right", padx=5, pady=5)
 
         draw_browser_service(services_frame, "Tidal", "https://listen.tidal.com")
         draw_browser_service(services_frame, "Spotify", "https://open.spotify.com")
