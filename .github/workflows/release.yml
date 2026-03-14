@@ -62,6 +62,7 @@ jobs:
           touch AppDir/djwerk.png
           cat <<EOF > AppDir/AppRun
           #!/bin/sh
+          HERE="\$(dirname "\$(readlink -f "\$0")")"
           exec "\$HERE/usr/bin/djwerk" "\$@"
           EOF
           chmod +x AppDir/AppRun
