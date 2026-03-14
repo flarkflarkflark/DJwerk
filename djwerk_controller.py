@@ -363,7 +363,8 @@ class DJwerkController:
         
         # Basis pad: downloads/[Source]/[Crate] [FORMAT]/
         fmt_tag = f"[{preferred_format.upper()}]"
-        playlist_folder = f"{crate_name.replace('/', '_').replace('\\', '_')} {fmt_tag}"
+        safe_crate_name = crate_name.replace('/', '_').replace('\\', '_')
+        playlist_folder = f"{safe_crate_name} {fmt_tag}"
         source_folder = os.path.join(self.core.download_path, main_source.capitalize())
         self.last_playlist_path = os.path.join(source_folder, playlist_folder)
         
