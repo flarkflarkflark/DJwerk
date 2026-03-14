@@ -91,13 +91,13 @@ class DJwerkCore:
             }, {
                 'key': 'FFmpegMetadata',
             }],
-            'writethumbnail': False, # GEWIJZIGD: Thumbnails kunnen post-processing crashes veroorzaken op Linux
+            'writethumbnail': False, 
             'quiet': True,
             'no_warnings': True,
             'socket_timeout': 30, 
-            'retries': 3,
-            'fragment_retries': 3,
-            'ignoreerrors': False,
+            'retries': 5,
+            'fragment_retries': 5,
+            'ignoreerrors': True,
             'extract_flat': False,
             'default_search': 'ytsearch'
         }
@@ -117,7 +117,14 @@ class DJwerkCore:
                 info = ydl.extract_info(url, download=True)
                 
                 if not info:
-                    raise Exception("yt-dlp returned no info for URL.")
+                    # Try one more time with zero format restrictions if it's a search
+                    if "ytsearch" in url:
+                        ydl_opts['format'] = 'best'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl2:
+                            info = ydl2.extract_info(url, download=True)
+                    
+                    if not info:
+                        raise Exception("yt-dlp returned no info for URL.")
 
                 # yt-dlp kan entries hebben (bij search)
                 if 'entries' in info:
@@ -129,33 +136,33 @@ class DJwerkCore:
                 # Bepaal het uiteindelijke bestand op basis van wat yt-dlp zegt
                 final_filename = None
                 source_info = {
-                    'abr': info.get('abr', 0), # Average Bitrate
+                    'abr': info.get('abr', 0), 
                     'acodec': info.get('acodec', 'unknown'),
                     'ext': info.get('ext', 'unknown')
                 }
                 
                 if 'requested_downloads' in info and len(info['requested_downloads']) > 0:
-                    # De laatste entry in requested_downloads is meestal het post-processed bestand
                     final_filename = info['requested_downloads'][-1].get('filepath')
                 
                 if not final_filename or not os.path.exists(final_filename):
-                    # Fallback naar préparé filename (deze geeft soms de webm naam, dus extensie swappen)
+                    # Fallback naar préparé filename
                     base_filename = ydl.prepare_filename(info)
                     filename_without_ext = os.path.splitext(base_filename)[0]
-                    final_filename = f"{filename_without_ext}.{format_choice}"
-                
-                # LAATSTE REDMIDDEL: Glob search als yt-dlp liegt over de naam
-                if not os.path.exists(final_filename):
-                    print(f"[DEBUG] File not found at {final_filename}, scanning directory...")
-                    search_pattern = os.path.join(self.download_path, f"*.{format_choice}")
-                    import glob
-                    files = glob.glob(search_pattern)
-                    if files:
-                        # Pak het meest recent gewijzigde bestand dat lijkt op onze track
-                        final_filename = max(files, key=os.path.getmtime)
-                        print(f"[DEBUG] Found alternative: {final_filename}")
+                    # Check of er een bestand is met de gewenste extensie
+                    potential = f"{filename_without_ext}.{format_choice}"
+                    if os.path.exists(potential):
+                        final_filename = potential
                     else:
-                        raise FileNotFoundError(f"Final file missing for: {url}")
+                        # Scan de folder voor de meest logische match
+                        search_pattern = f"{filename_without_ext}*"
+                        matches = glob.glob(search_pattern)
+                        if matches:
+                            # Pak het bestand dat eindigt op onze format_choice of gewoon de grootste
+                            best_match = next((m for m in matches if m.endswith(format_choice)), matches[0])
+                            final_filename = best_match
+                
+                if not final_filename or not os.path.exists(final_filename):
+                    raise FileNotFoundError(f"Final file missing for: {url}")
 
                 return True, final_filename, source_info
 

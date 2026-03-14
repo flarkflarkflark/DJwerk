@@ -15,6 +15,23 @@ class SpotifyApiHandler:
         self.client_id = client_id
         self.client_secret = client_secret
 
+    def logout(self):
+        """Clears the session and deletes the cache file."""
+        self.sp = None
+        if os.path.exists(self.cache_path):
+            os.remove(self.cache_path)
+        print("[SPOTIFY] Logged out and cache removed.")
+
+    def get_username(self):
+        """Returns the display name of the logged-in user."""
+        if self.sp or self.check_login():
+            try:
+                me = self.sp.current_user()
+                return me.get('display_name') or me.get('id')
+            except:
+                return "Active Session"
+        return None
+
     def check_login(self):
         """Checks if a valid Spotify session exists in cache."""
         if os.path.exists(self.cache_path):

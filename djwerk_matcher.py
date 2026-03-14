@@ -2,6 +2,7 @@ import requests
 import re
 import json
 import yt_dlp
+import os
 from typing import List, Dict
 from tidal_api_handler import TidalApiHandler
 
@@ -151,28 +152,110 @@ class SpotifyCrateParser:
                     tracks = self.api.get_album_tracks(item_id)
                 if tracks: return tracks
 
-        # 2. JSON/META FALLBACK (For non-logged in users)
-        try:
-            import requests
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-            response = requests.get(url, headers=headers, timeout=10)
-            if response.status_code == 200:
-                # Probeer __NEXT_DATA__ variant (vaak aanwezig op Spotify web player)
-                json_match = re.search(r'<script id="initial-state" type="text/plain">([^<]+)</script>', response.text)
-                if not json_match:
-                     json_match = re.search(r'<script id="session" type="application/json">([^<]+)</script>', response.text)
+        # 2. BROWSER-AUTHENTICATED SCRAPE (Fallback for metadata)
+        if cookies_from_browser != "none":
+            try:
+                import requests
+                import tempfile
+                import http.cookiejar
                 
-                # Als dat niet werkt, gebruiken we de meta tags (OG tags) voor basis info
-                if not json_match:
-                    title_match = re.search(r'<meta property="og:title" content="([^"]+)"', response.text)
-                    if title_match:
-                         # Spotify OG titles are usually "Album Name - Album by Artist"
-                         raw_title = title_match.group(1)
-                         print(f"[MATCHER] Found OG Title: {raw_title}")
-                         # This is only for a single track usually, for albums we need more
-        except: pass
+                print(f"[MATCHER] Attempting Spotify Browser Scrape for: {url}")
+                cookie_path = tempfile.mktemp()
+                # Use a non-DRM URL to extract cookies if possible
+                ydl_opts = {'quiet': True, 'cookiesfrombrowser': (cookies_from_browser,), 'cookiefile': cookie_path}
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    try: ydl.extract_info('https://www.spotify.com', download=False)
+                    except: pass
+                
+                if not os.path.exists(cookie_path):
+                    print("[MATCHER] Spotify Cookie export failed.")
+                    return []
 
-        # 3. YT-DLP APPROACH
+                cj = http.cookiejar.MozillaCookieJar(cookie_path)
+                cj.load(ignore_discard=True, ignore_expires=True)
+                session = requests.Session()
+                session.cookies = cj
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                response = session.get(url, headers=headers, timeout=15)
+                
+                if os.path.exists(cookie_path): os.remove(cookie_path)
+                
+                if response.status_code == 200:
+                    print(f"[MATCHER] Spotify Page Load Success ({len(response.text)} bytes)")
+                    # Look for the JSON blob in the HTML
+                    # Spotify Embeds metadata in several possible script tags
+                    json_match = re.search(r'<script id="initial-state" type="text/plain">([^<]+)</script>', response.text)
+                    if not json_match:
+                         json_match = re.search(r'<script type="application/json" id="session">([^<]+)</script>', response.text)
+                    
+                    if json_match:
+                        print("[MATCHER] Found Spotify JSON blob.")
+                        import base64
+                        data_str = json_match.group(1)
+                        try:
+                            # Try decoding if it looks like base64, otherwise load raw
+                            try:
+                                decoded = base64.b64decode(data_str).decode('utf-8')
+                                data = json.loads(decoded)
+                            except:
+                                data = json.loads(data_str)
+                        except Exception as je:
+                            print(f"[MATCHER] Spotify JSON Parse Error: {je}")
+                            return []
+                        
+                        # Deep search for tracks in the JSON
+                        def find_spotify_tracks(obj):
+                            found = []
+                            if isinstance(obj, dict):
+                                if 'type' in obj and obj['type'] == 'track' and 'name' in obj:
+                                    artist = obj.get('artists', [{}])[0].get('name', 'Unknown')
+                                    found.append({
+                                        'artist': artist,
+                                        'title': obj['name'],
+                                        'album': obj.get('album', {}).get('name', ''),
+                                        'duration': obj.get('duration_ms', 0) / 1000.0,
+                                        'is_lossless': False,
+                                        'is_playlist': True,
+                                        'source': 'Spotify',
+                                        'url': f"https://open.spotify.com/track/{obj.get('id')}"
+                                    })
+                                else:
+                                    for v in obj.values(): found.extend(find_spotify_tracks(v))
+                            elif isinstance(obj, list):
+                                for item in obj: found.extend(find_spotify_tracks(item))
+                            return found
+                        
+                        tracks = find_spotify_tracks(data)
+                        if tracks:
+                            # Deduplicate
+                            seen = set()
+                            unique = []
+                            for t in tracks:
+                                sig = f"{t['artist']}-{t['title']}"
+                                if sig not in seen:
+                                    seen.add(sig); unique.append(t)
+                            print(f"[MATCHER] Spotify Browser Success: Found {len(unique)} tracks.")
+                            return unique
+                    
+                    # ULTIMATE FALLBACK: Regex search for track links or names in HTML
+                    print("[MATCHER] Spotify JSON search failed, attempting regex fallback...")
+                    # Pattern for track names in titles or descriptions
+                    # Often Spotify pages have "Track Name by Artist" in various meta tags
+                    track_links = re.findall(r'https://open\.spotify\.com/track/([a-zA-Z0-9]+)', response.text)
+                    if track_links:
+                        print(f"[MATCHER] Found {len(set(track_links))} track links in HTML.")
+                        for tid in list(set(track_links))[:50]:
+                            tracks.append({
+                                'artist': 'Spotify', 'title': f'Track {tid}',
+                                'album': 'Spotify Playlist', 'is_lossless': False,
+                                'is_playlist': True, 'source': 'Spotify',
+                                'url': f"https://open.spotify.com/track/{tid}"
+                            })
+                        return tracks
+            except Exception as e:
+                print(f"[MATCHER] Spotify Browser Scrape Error: {e}")
+
+        # 3. YT-DLP APPROACH (Final Fallback)
         try:
             ydl_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': False}
             if cookies_from_browser.lower() != "none": ydl_opts['cookiesfrombrowser'] = (cookies_from_browser,)
@@ -300,6 +383,111 @@ class BeatportCrateParser:
     def get_tracks(self, url: str, cookies_from_browser: str = "none") -> List[Dict]:
         print(f"[MATCHER] Scraping Beatport: {url}")
         tracks = []
+        
+        # 1. BROWSER-AUTHENTICATED APPROACH (For /library or Collection)
+        if "/library" in url or "/collection/" in url:
+            if cookies_from_browser != "none":
+                try:
+                    import requests
+                    import tempfile
+                    import http.cookiejar
+                    
+                    cookie_path = tempfile.mktemp()
+                    ydl_opts = {'quiet': True, 'cookiesfrombrowser': (cookies_from_browser,), 'cookiefile': cookie_path}
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        try: ydl.extract_info('https://www.beatport.com', download=False)
+                        except: pass
+                    
+                    cj = http.cookiejar.MozillaCookieJar(cookie_path)
+                    cj.load(ignore_discard=True, ignore_expires=True)
+                    session = requests.Session()
+                    session.cookies = cj
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                    response = session.get(url, headers=headers, timeout=15)
+                    
+                    if os.path.exists(cookie_path): os.remove(cookie_path)
+                    
+                    if response.status_code == 200:
+                        json_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">([^<]+)</script>', response.text)
+                        if json_match:
+                            data = json.loads(json_match.group(1))
+                            props = data.get('props', {}).get('pageProps', {})
+                            
+                            # Deep search for track results
+                            def find_tracks_recursive(obj, depth=0):
+                                found = []
+                                if depth > 30: return found
+                                if isinstance(obj, dict):
+                                    # Beatport library results often live in 'results' key
+                                    if 'results' in obj and isinstance(obj['results'], list) and len(obj['results']) > 0:
+                                        first = obj['results'][0]
+                                        # Very broad check for track-like objects
+                                        if isinstance(first, dict) and ('artists' in first or 'artist' in first) and ('name' in first or 'title' in first):
+                                            print(f"[MATCHER] Found Beatport results list (len: {len(obj['results'])}) at depth {depth}")
+                                            for item in obj['results']:
+                                                artist = item.get('artists', [{}])[0].get('name', item.get('artist', {}).get('name', 'Unknown'))
+                                                title = item.get('name') or item.get('title', 'Unknown')
+                                                
+                                                release = item.get('release', {})
+                                                album = release.get('name') if isinstance(release, dict) else ""
+                                                
+                                                dur = 0
+                                                if isinstance(item.get('duration'), dict):
+                                                    dur = item['duration'].get('milliseconds', 0) / 1000.0
+                                                else:
+                                                    dur = item.get('duration', 0)
+
+                                                found.append({
+                                                    'artist': artist,
+                                                    'title': title,
+                                                    'album': album,
+                                                    'duration': dur,
+                                                    'bpm': item.get('bpm', 0),
+                                                    'key': item.get('key', {}).get('name', '') if isinstance(item.get('key'), dict) else str(item.get('key', '')),
+                                                    'is_lossless': True,
+                                                    'is_playlist': True,
+                                                    'source': 'Beatport',
+                                                    'url': f"https://www.beatport.com/track/{item.get('slug', 'track')}/{item.get('id', '')}"
+                                                })
+                                            return found
+                                    for v in obj.values():
+                                        res = find_tracks_recursive(v, depth + 1)
+                                        if res: found.extend(res)
+                                elif isinstance(obj, list):
+                                    for item in obj:
+                                        res = find_tracks_recursive(item, depth + 1)
+                                        if res: found.extend(res)
+                                return found
+                            
+                            tracks = find_tracks_recursive(props)
+                            
+                            if not tracks:
+                                # ULTIMATE FALLBACK: Regex search for track titles in HTML
+                                print("[MATCHER] JSON search failed, attempting regex fallback...")
+                                track_matches = re.findall(r'\"artist\":\{\"name\":\"([^\"]+)\"\},\"name\":\"([^\"]+)\"', response.text)
+                                for a, t in track_matches:
+                                    tracks.append({
+                                        'artist': a, 'title': t, 'album': 'Beatport Library',
+                                        'is_lossless': True, 'is_playlist': True, 'source': 'Beatport'
+                                    })
+                            
+                            if tracks:
+                                # Deduplicate
+                                unique = []
+                                seen = set()
+                                for t in tracks:
+                                    sig = f"{t['artist']}-{t['title']}"
+                                    if sig not in seen:
+                                        seen.add(sig); unique.append(t)
+                                print(f"[MATCHER] Beatport Success: Found {len(unique)} tracks.")
+                                return unique
+                            if tracks:
+                                print(f"[MATCHER] Beatport JSON Success: Found {len(tracks)} tracks.")
+                                return tracks
+                except Exception as e:
+                    print(f"[MATCHER] Beatport Auth Scrape Error: {e}")
+
+        # 2. YT-DLP FALLBACK (Normal tracks/charts)
         try:
             ydl_opts = {'quiet': True, 'no_warnings': True, 'extract_flat': False}
             if cookies_from_browser.lower() != "none": ydl_opts['cookiesfrombrowser'] = (cookies_from_browser,)
@@ -337,41 +525,17 @@ class UniversalMatcher:
         print(f"[MATCHER] Auto-resolving SoundCloud 'you' alias via {cookies_from_browser}...")
         try:
             import requests
-            # We maken een tijdelijk bestand voor de cookies via yt-dlp om requests te voeden
-            import http.cookiejar
-            import tempfile
-            
-            with tempfile.NamedTemporaryFile(delete=False) as tf:
-                cookie_path = tf.name
-                
-            ydl_opts = {'quiet': True, 'cookiesfrombrowser': (cookies_from_browser,), 'cookiefile': cookie_path}
+            # We pingen de URL met yt-dlp om de uiteindelijke URL te krijgen (redirects)
+            ydl_opts = {'quiet': True, 'cookiesfrombrowser': (cookies_from_browser,), 'noplaylist': True}
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Trigger cookie export
-                try: ydl.extract_info("https://soundcloud.com", download=False)
-                except: pass
-                
-            cj = http.cookiejar.MozillaCookieJar(cookie_path)
-            cj.load(ignore_discard=True, ignore_expires=True)
-            
-            session = requests.Session()
-            session.cookies = cj
-            response = session.get("https://soundcloud.com/you", allow_redirects=True, timeout=10)
-            
-            if os.path.exists(cookie_path): os.remove(cookie_path)
-            
-            final_url = response.url
-            if "soundcloud.com/you" not in final_url:
-                resolved = url.replace("soundcloud.com/you", final_url.replace("https://", "").replace("http://", ""))
-                print(f"[MATCHER] Successfully resolved to: {resolved}")
-                return resolved
-                    
-            # Fallback: Check metadata voor permalink
-            match = re.search(r'\"permalink_url\":\"https://soundcloud\.com/([^\"]+)\"', response.text)
-            if match:
-                username = match.group(1)
-                resolved = url.replace("soundcloud.com/you", f"soundcloud.com/{username}")
-                print(f"[MATCHER] Found username in meta: {resolved}")
-                return resolved
+                # We trekken metadata van de 'you' pagina, yt-dlp volgt redirects
+                info = ydl.extract_info("https://soundcloud.com/you", download=False)
+                if info and 'webpage_url' in info:
+                    final_url = info['webpage_url']
+                    if "soundcloud.com/you" not in final_url:
+                        resolved = url.replace("soundcloud.com/you", final_url.replace("https://", "").replace("http://", ""))
+                        print(f"[MATCHER] Successfully resolved to: {resolved}")
+                        return resolved
         except Exception as e:
             print(f"[MATCHER] Resolve failed: {e}")
         return url

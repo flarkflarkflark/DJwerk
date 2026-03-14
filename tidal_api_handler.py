@@ -91,6 +91,24 @@ class TidalApiHandler:
         with open(self.token_path, 'w') as f:
             json.dump(data, f)
 
+    def logout(self):
+        """Clears the session and deletes the token file."""
+        self.session = tidalapi.Session()
+        self.logged_in = False
+        if os.path.exists(self.token_path):
+            os.remove(self.token_path)
+        print("[TIDAL] Logged out and token removed.")
+
+    def get_username(self):
+        """Returns the username or email of the logged-in user."""
+        if self.logged_in and self.session.check_login():
+            try:
+                # The user object usually has the email/username
+                return self.session.user.id
+            except:
+                return "Active Session"
+        return None
+
     def get_playlist_tracks(self, playlist_id):
         if not self.logged_in and not self.check_login():
             return []

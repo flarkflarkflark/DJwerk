@@ -54,17 +54,34 @@ class DJwerkController:
             self.view.bind("<<ConnectTidalEvent>>", lambda e: self.connect_tidal())
             self.view.bind("<<ConnectSpotifyEvent>>", lambda e: self.connect_spotify())
             self.view.bind("<<ConnectBandcampEvent>>", lambda e: self.connect_bandcamp())
-            self.view.bind("<<OpenLastFolderEvent>>", lambda e: self.open_last_playlist_folder())
+            self.view.bind("<<OpenHistoryFolderEvent>>", lambda e: self.open_history_folder())
             self.view.bind("<<RefreshStatusesEvent>>", lambda e: threading.Thread(target=self._refresh_connection_statuses, daemon=True).start())
             self.view.bind("<<CancelSyncEvent>>", lambda e: self.cancel_sync())
             self.view.bind("<<ExportRekordboxEvent>>", lambda e: self.export_rekordbox())
             self.view.bind("<<ExportEngineEvent>>", lambda e: self.export_engine())
             self.view.bind("<<ExportMixxxEvent>>", lambda e: self.export_mixxx())
             self.view.bind("<<ExportM3UEvent>>", lambda e: self.export_m3u_rich())
+            
+            # Logout Events
+            self.view.bind("<<LogoutTidalEvent>>", lambda e: self.logout_service("tidal"))
+            self.view.bind("<<LogoutSpotifyEvent>>", lambda e: self.logout_service("spotify"))
+            self.view.bind("<<LogoutBandcampEvent>>", lambda e: self.logout_service("bandcamp"))
+            self.view.bind("<<LogoutSoundCloudEvent>>", lambda e: self.logout_service("soundcloud"))
+            self.view.bind("<<LogoutBeatportEvent>>", lambda e: self.logout_service("beatport"))
         
         if hasattr(self.view, 'log_message'):
             self.initialize_ui_log()
             
+        self._refresh_connection_statuses()
+
+    def logout_service(self, service_name):
+        if service_name == "tidal":
+            self.tidal_api.logout()
+        elif service_name == "spotify":
+            self.spotify_api.logout()
+        # Bandcamp/SC/Beatport are browser-based, logout usually means clear browser cookies
+        # or we just mark them as disconnected in our check
+        self.ui_log(f">> [SYSTEM] {service_name.upper()} SESSION CLEARED. LOG OUT IN BROWSER TO FULLY DISCONNECT.")
         self._refresh_connection_statuses()
 
     def cancel_sync(self):
@@ -120,13 +137,26 @@ class DJwerkController:
         # Update UI labels
         if hasattr(self.view, "service_status_labels"):
             labels = self.view.service_status_labels
+            acc_labels = getattr(self.view, "service_account_labels", {})
             
             def update_lbl(name, connected):
                 if name in labels:
                     txt = "CONNECTED" if connected else "DISCONNECTED"
                     clr = "#44FF44" if connected else "#FF4444"
+                    
+                    # Fetch username if connected
+                    uname = ""
+                    if connected:
+                        if name == "tidal": uname = self.tidal_api.get_username() or "Active"
+                        elif name == "spotify": uname = self.spotify_api.get_username() or "Active"
+                        # For others we could try to scrape, but let's stick to simple 'Active' for now
+                        else: uname = "Active"
+
                     if hasattr(self.view, "after"):
-                        self.view.after(0, lambda l=labels[name], t=txt, c=clr: l.configure(text=t, text_color=c))
+                        self.view.after(0, lambda l=labels[name], t=txt, c=clr, al=acc_labels.get(name), u=uname: (
+                            l.configure(text=t, text_color=c),
+                            al.configure(text=f"({u})") if al and u else al.configure(text="") if al else None
+                        ))
                     else:
                         labels[name].configure(text=txt, text_color=clr)
 
@@ -134,6 +164,7 @@ class DJwerkController:
             update_lbl("spotify", self.view.spotify_logged_in)
             update_lbl("bandcamp", self.view.bandcamp_logged_in)
             update_lbl("soundcloud", sc_connected)
+            update_lbl("beatport", has_auth("beatport"))
 
     def connect_tidal(self):
         def on_login_details(link, code):
@@ -157,19 +188,20 @@ class DJwerkController:
         if username and self.bc_api.login(username):
             self.view.bandcamp_logged_in = True
 
-    def open_last_playlist_folder(self):
-        if not self.last_playlist_path or not os.path.exists(self.last_playlist_path):
-            self.ui_log(">> [INFO] NO RECENT PLAYLIST SYNCED YET.")
+    def open_history_folder(self):
+        target_path = getattr(self.view, "selected_history_path", None)
+        if not target_path or not os.path.exists(target_path):
+            self.ui_log(">> [INFO] SELECTED FOLDER NOT ACCESSIBLE.")
             return
         
         import platform, subprocess
         try:
             if platform.system() == "Windows":
-                os.startfile(self.last_playlist_path)
+                os.startfile(target_path)
             elif platform.system() == "Darwin":
-                subprocess.call(["open", self.last_playlist_path])
+                subprocess.call(["open", target_path])
             else:
-                subprocess.call(["xdg-open", self.last_playlist_path])
+                subprocess.call(["xdg-open", target_path])
         except Exception as e:
             self.ui_log(f">> [ERROR] COULD NOT OPEN FOLDER: {e}")
 
@@ -335,10 +367,27 @@ class DJwerkController:
         source_folder = os.path.join(self.core.download_path, main_source.capitalize())
         self.last_playlist_path = os.path.join(source_folder, playlist_folder)
         
-        # PERSIST LAST SYNCED PLAYLIST
+        # PERSIST LAST SYNCED PLAYLIST & HISTORY
         if hasattr(self.view, "save_config"):
             self.view.last_playlist_path = self.last_playlist_path
+            
+            # Add to history and keep unique
+            history = getattr(self.view, "playlist_history", [])
+            if self.last_playlist_path in history:
+                history.remove(self.last_playlist_path)
+            history.insert(0, self.last_playlist_path)
+            self.view.playlist_history = history[:15] # Keep last 15
+            
             self.view.save_config()
+            
+            # Refresh UI dropdown if possible
+            if hasattr(self.view, "after") and hasattr(self.view, "history_menu"):
+                h_vals = [os.path.basename(p) for p in self.view.playlist_history]
+                if h_vals:
+                    h_vals.extend(["---", "Clear History"])
+                else:
+                    h_vals = ["No History"]
+                self.view.after(0, lambda v=h_vals: self.view.history_menu.configure(values=v))
         
         # DOWNLOAD PLAYLIST COVER (folder.jpg)
         playlist_cover_url = tracks[0].get('playlist_cover')
