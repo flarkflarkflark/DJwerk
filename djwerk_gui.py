@@ -187,7 +187,7 @@ class DJwerkApp(ctk.CTk):
 
         info_frame = ctk.CTkFrame(settings_window, fg_color=MID_GREY, corner_radius=10)
         info_frame.pack(fill="x", padx=20, pady=20)
-        ctk.CTkLabel(info_frame, text="💡 Tip: Zet FX uit als je inlogt via een trage X11/SSH verbinding.\nDit voorkomt dat de terminal / log laggy wordt.", 
+        ctk.CTkLabel(info_frame, text="💡 Tip: Disable FX if logging in via a slow X11/SSH connection.\nThis prevents terminal/log lag.", 
                      justify="left", text_color="#cccccc", font=ctk.CTkFont(size=11)).pack(padx=10, pady=10)
 
         def save_and_close():
@@ -208,7 +208,7 @@ class DJwerkApp(ctk.CTk):
                             "download_path": new_path,
                             "fx_enabled": self.fx_enabled
                         }, f, indent=4)
-                    self.log_message(f">> SETTINGS: Saved. FX is {'AAN' if self.fx_enabled else 'UIT'}.")
+                    self.log_message(f">> SETTINGS: Saved. FX is {'ON' if self.fx_enabled else 'OFF'}.")
                 except Exception as e:
                     self.log_message(f">> SETTINGS ERROR: Could not save config. {e}")
             

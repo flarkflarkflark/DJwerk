@@ -120,7 +120,7 @@ class DJwerkCore:
         Returns True on success, False on failure to prevent app crashes.
         """
         if not os.path.exists(file_path):
-            print(f"[DJwerkCore] Fout: Bestand bestaat niet: {file_path}")
+            print(f"[DJwerkCore] Error: File does not exist: {file_path}")
             return False
 
         try:
@@ -177,7 +177,7 @@ class DJwerkCore:
                 return True
                 
         except Exception as e:
-            print(f"[DJwerkCore] Fout tijdens metadata update voor {file_path}: {str(e)}")
+            print(f"[DJwerkCore] Error during metadata update for {file_path}: {str(e)}")
             return False
 
 if __name__ == "__main__":

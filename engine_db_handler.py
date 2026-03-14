@@ -18,7 +18,7 @@ class EngineDBHandler:
         self.dry_run = dry_run
         
         if self.dry_run:
-            print(f"[ENGINE_DB] ⚠️ DRY-RUN MODE ACTIEF. Geen wijzigingen aan {self.db_path}.")
+            print(f"[ENGINE_DB] ⚠️ DRY-RUN MODE ACTIVE. No changes to {self.db_path}.")
             
         self.conn = self._connect()
         if self.conn:
@@ -53,7 +53,7 @@ class EngineDBHandler:
                 shutil.copy2(self.db_path, backup_path)
                 print(f"[ENGINE_DB] 🛡️ Pre-sync backup gemaakt: {backup_path}")
             except Exception as e:
-                print(f"[ENGINE_DB] ❌ Waarschuwing: Kon geen backup maken van {self.db_path}: {e}")
+                print(f"[ENGINE_DB] ❌ Warning: Could not create backup of {self.db_path}: {e}")
 
     def _ensure_schema(self):
         """Zorgt dat de tabellen bestaan (alleen nuttig voor dummy/test omgevingen)."""
@@ -84,7 +84,7 @@ class EngineDBHandler:
         metadata is een dict met: artist, title, album, bpm, key
         """
         if not self.conn:
-            print("[ENGINE_DB] Geen database verbinding.")
+            print("[ENGINE_DB] No database connection.")
             return False
 
         try:
@@ -134,12 +134,12 @@ class EngineDBHandler:
             return True
 
         except sqlite3.Error as e:
-            print(f"[ENGINE_DB] ❌ Database Error bij toevoegen track '{metadata.get('title', 'Unknown')}': {e}")
+            print(f"[ENGINE_DB] ❌ Database Error adding track '{metadata.get('title', 'Unknown')}': {e}")
             if self.conn:
                 self.conn.rollback() # Voorkom corrupte transacties
             return False
         except Exception as e:
-            print(f"[ENGINE_DB] ❌ Onverwachte fout: {e}")
+            print(f"[ENGINE_DB] ❌ Unexpected error: {e}")
             return False
 
     def close(self):
@@ -152,5 +152,5 @@ if __name__ == "__main__":
     handler = EngineDBHandler("dummy_m.db", dry_run=True)
     test_meta = {"artist": "Test Artist", "title": "Test Track", "bpm": "124.5", "key": "8A"}
     success = handler.add_track_to_db("/downloads/test_track.flac", test_meta)
-    print(f"Test geslaagd: {success}")
+    print(f"Test passed: {success}")
     handler.close()
