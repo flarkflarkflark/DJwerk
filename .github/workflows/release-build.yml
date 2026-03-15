@@ -186,6 +186,7 @@ jobs:
         run: |
           sudo softwareupdate --install-rosetta --agree-to-license
       - name: Set up Python
+        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -193,11 +194,11 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          "${{ steps.setup-python.outputs.python-path }}" -m pip install -r requirements.txt
       - name: Build with PyInstaller
         run: |
           export DJWERK_ARCH=x86_64
-          python build_installers.py
+          "${{ steps.setup-python.outputs.python-path }}" build_installers.py
       - name: Zip .app bundle
         run: |
           version_tag="${{ needs.prepare.outputs.version_tag }}"
