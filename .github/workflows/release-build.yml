@@ -1,0 +1,263 @@
+name: Build Release Assets
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+      is_tag: ${{ steps.version.outputs.is_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        # Use a consistent interpreter to read djwerk_version.py
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Resolve version and validate tag
+        id: version
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import os
+          import sys
+
+          spec = importlib.util.spec_from_file_location("djwerk_version", "djwerk_version.py")
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          version = str(getattr(mod, "APP_VERSION", "")).strip()
+          if not version:
+              print("APP_VERSION missing in djwerk_version.py", file=sys.stderr)
+              sys.exit(1)
+          version_tag = f"v{version}"
+
+          ref_type = os.environ.get("GITHUB_REF_TYPE", "")
+          ref_name = os.environ.get("GITHUB_REF_NAME", "")
+          is_tag = "true" if ref_type == "tag" else "false"
+          if ref_type == "tag" and ref_name != version_tag:
+              print(f"Tag {ref_name} does not match APP_VERSION {version_tag}", file=sys.stderr)
+              sys.exit(1)
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version={version}\n")
+              fh.write(f"version_tag={version_tag}\n")
+              fh.write(f"is_tag={is_tag}\n")
+          PY
+
+  build-windows:
+    runs-on: windows-latest
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Build with PyInstaller
+        run: |
+          python build_installers.py
+      - name: Rename release asset
+        shell: pwsh
+        run: |
+          $versionTag = "${{ needs.prepare.outputs.version_tag }}"
+          $outDir = "release_out"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          Copy-Item -Path "dist\\DJwerk.exe" -Destination "$outDir\\DJwerk-$versionTag-Windows-x64.exe" -Force
+      - name: Verify asset
+        shell: pwsh
+        run: |
+          $versionTag = "${{ needs.prepare.outputs.version_tag }}"
+          $path = "release_out\\DJwerk-$versionTag-Windows-x64.exe"
+          if (!(Test-Path $path)) { throw "Missing $path" }
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJwerk-${{ needs.prepare.outputs.version_tag }}-Windows-x64.exe
+          path: release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-Windows-x64.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpulse0 libdbus-1-3 libx11-6 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrender1 libxtst6 libgl1
+          pip install -r requirements.txt
+      - name: Build with PyInstaller
+        run: |
+          python build_installers.py
+      - name: Install AppImageTool
+        run: |
+          sudo wget -O /usr/local/bin/appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          sudo chmod +x /usr/local/bin/appimagetool
+      - name: Create AppImage
+        run: |
+          mkdir -p AppDir/usr/bin
+          cp dist/DJwerk AppDir/usr/bin/djwerk
+          cat <<EOF > AppDir/djwerk.desktop
+          [Desktop Entry]
+          Name=DJwerk
+          Exec=djwerk
+          Icon=djwerk
+          Type=Application
+          Categories=Audio;
+          EOF
+          touch AppDir/djwerk.png
+          cat <<'EOF' > AppDir/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/djwerk" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          ARCH=x86_64 /usr/local/bin/appimagetool --appimage-extract-and-run AppDir/ dist/DJwerk-x86_64.AppImage
+      - name: Rename release asset
+        run: |
+          version_tag="${{ needs.prepare.outputs.version_tag }}"
+          mkdir -p release_out
+          cp dist/DJwerk-x86_64.AppImage "release_out/DJwerk-${version_tag}-Linux-x86_64.AppImage"
+      - name: Verify asset
+        run: |
+          test -f "release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-Linux-x86_64.AppImage"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJwerk-${{ needs.prepare.outputs.version_tag }}-Linux-x86_64.AppImage
+          path: release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-Linux-x86_64.AppImage
+
+  build-macos-silicon:
+    # macos-14 is Apple Silicon on GitHub-hosted runners.
+    runs-on: macos-14
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Build with PyInstaller
+        run: |
+          export DJWERK_ARCH=arm64
+          python build_installers.py
+      - name: Zip .app bundle
+        run: |
+          version_tag="${{ needs.prepare.outputs.version_tag }}"
+          mkdir -p release_out
+          ditto -c -k --sequesterRsrc --keepParent "dist/DJwerk.app" "release_out/DJwerk-${version_tag}-macOS-Silicon-arm64.zip"
+      - name: Verify asset
+        run: |
+          test -f "release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Silicon-arm64.zip"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Silicon-arm64.zip
+          path: release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Silicon-arm64.zip
+
+  build-macos-intel:
+    # macos-13 is Intel on GitHub-hosted runners.
+    runs-on: macos-13
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Build with PyInstaller
+        run: |
+          export DJWERK_ARCH=x86_64
+          python build_installers.py
+      - name: Zip .app bundle
+        run: |
+          version_tag="${{ needs.prepare.outputs.version_tag }}"
+          mkdir -p release_out
+          ditto -c -k --sequesterRsrc --keepParent "dist/DJwerk.app" "release_out/DJwerk-${version_tag}-macOS-Intel-x86_64.zip"
+      - name: Verify asset
+        run: |
+          test -f "release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Intel-x86_64.zip"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Intel-x86_64.zip
+          path: release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Intel-x86_64.zip
+
+  release:
+    if: needs.prepare.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    needs:
+      - prepare
+      - build-windows
+      - build-linux
+      - build-macos-silicon
+      - build-macos-intel
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_out
+      - name: Flatten artifacts
+        run: |
+          mkdir -p final_assets
+          find release_out -maxdepth 2 -type f -print0 | xargs -0 -I{} cp {} final_assets/
+      - name: Verify asset set
+        run: |
+          version_tag="${{ needs.prepare.outputs.version_tag }}"
+          expected=(
+            "DJwerk-${version_tag}-Windows-x64.exe"
+            "DJwerk-${version_tag}-Linux-x86_64.AppImage"
+            "DJwerk-${version_tag}-macOS-Silicon-arm64.zip"
+            "DJwerk-${version_tag}-macOS-Intel-x86_64.zip"
+          )
+          for f in "${expected[@]}"; do
+            if [ ! -f "final_assets/$f" ]; then
+              echo "Missing final_assets/$f" >&2
+              exit 1
+            fi
+          done
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ needs.prepare.outputs.version_tag }}"
+          title="DJwerk ${tag}"
+          notes="Bugfix release
+
+- Quality policy logs exact requested output and probes unknown sources before deciding
+- Pre-sync eligibility scan added
+- Canonical naming and metadata fallback improvements
+- Popup singleton and Tidal login cleanup"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to overwrite assets." >&2
+            exit 1
+          fi
+          gh release create "$tag" final_assets/* --title "$title" --notes "$notes"
