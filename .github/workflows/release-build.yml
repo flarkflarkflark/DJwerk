@@ -177,15 +177,19 @@ jobs:
           path: release_out/DJwerk-${{ needs.prepare.outputs.version_tag }}-macOS-Silicon-arm64.zip
 
   build-macos-intel:
-    # macos-13 is Intel on GitHub-hosted runners.
-    runs-on: macos-13
+    # macos-13 Intel runners are not available in this repo; use macos-14 + Rosetta.
+    runs-on: macos-14
     needs: prepare
     steps:
       - uses: actions/checkout@v4
+      - name: Install Rosetta (x86_64 support)
+        run: |
+          sudo softwareupdate --install-rosetta --agree-to-license
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          architecture: "x64"
           cache: "pip"
       - name: Install dependencies
         run: |
