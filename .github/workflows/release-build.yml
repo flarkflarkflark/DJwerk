@@ -250,12 +250,7 @@ jobs:
         run: |
           tag="${{ needs.prepare.outputs.version_tag }}"
           title="DJwerk ${tag}"
-          notes="Bugfix release
-
-- Quality policy logs exact requested output and probes unknown sources before deciding
-- Pre-sync eligibility scan added
-- Canonical naming and metadata fallback improvements
-- Popup singleton and Tidal login cleanup"
+          notes=$'Bugfix release\n\n- Quality policy logs exact requested output and probes unknown sources before deciding\n- Pre-sync eligibility scan added\n- Canonical naming and metadata fallback improvements\n- Popup singleton and Tidal login cleanup'
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite assets." >&2
             exit 1
