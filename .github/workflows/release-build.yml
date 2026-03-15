@@ -194,11 +194,11 @@ jobs:
           cache: "pip"
       - name: Install dependencies
         run: |
-          "${{ steps.setup-python.outputs.python-path }}" -m pip install -r requirements.txt
+          arch -x86_64 "${{ steps.setup-python.outputs.python-path }}" -m pip install -r requirements.txt
       - name: Build with PyInstaller
         run: |
           export DJWERK_ARCH=x86_64
-          "${{ steps.setup-python.outputs.python-path }}" build_installers.py
+          arch -x86_64 "${{ steps.setup-python.outputs.python-path }}" build_installers.py
       - name: Zip .app bundle
         run: |
           version_tag="${{ needs.prepare.outputs.version_tag }}"
